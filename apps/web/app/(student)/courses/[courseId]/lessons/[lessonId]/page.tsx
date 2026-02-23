@@ -53,6 +53,7 @@ export default function LessonViewPage() {
     const [allLessons, setAllLessons] = useState<Lesson[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isMobile, setIsMobile] = useState(false);
+    const [completedLessons, setCompletedLessons] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         setMounted(true);
@@ -80,6 +81,10 @@ export default function LessonViewPage() {
                 const currentLesson = lessonsList.find(l => l.id === lessonId) || lessonsList[0];
                 setActiveLesson(currentLesson || null);
             }
+
+            const storedCompleted: Record<string, boolean> = JSON.parse(localStorage.getItem("student_completed_lessons") || "{}");
+            setCompletedLessons(storedCompleted);
+
         } catch (e) {
             console.error("Failed to load course", e);
         }
@@ -129,6 +134,29 @@ export default function LessonViewPage() {
         }
     };
 
+    const handleLessonComplete = () => {
+        if (!activeLesson) return;
+
+        const updatedCompleted = { ...completedLessons, [activeLesson.id]: true };
+        setCompletedLessons(updatedCompleted);
+        localStorage.setItem("student_completed_lessons", JSON.stringify(updatedCompleted));
+
+        // Recalculate course progress
+        if (allLessons.length > 0) {
+            const courseCompletedCount = allLessons.filter(l => updatedCompleted[l.id]).length;
+            const progressPercentage = Math.round((courseCompletedCount / allLessons.length) * 100);
+
+            const storedProgress: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
+            storedProgress[courseId] = progressPercentage;
+            localStorage.setItem("student_progress", JSON.stringify(storedProgress));
+        }
+
+        // Auto advance if there's a next lesson
+        if (hasNextLesson) {
+            handleNextLesson();
+        }
+    };
+
     return (
         <div style={{ background: colors.bg, minHeight: "100%", display: "flex", flexDirection: "column" }}>
             <div style={{
@@ -166,10 +194,35 @@ export default function LessonViewPage() {
 
                             {/* Lesson Info */}
                             <div style={{ position: "relative" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
                                     <span style={{ fontSize: "12px", fontWeight: 900, color: colors.accent, textTransform: "uppercase", letterSpacing: "1.5px" }}>
                                         Aula {currentLessonIndex + 1} de {allLessons.length}
                                     </span>
+
+                                    {!completedLessons[activeLesson.id] && (
+                                        <button
+                                            onClick={handleLessonComplete}
+                                            style={{
+                                                display: "flex", alignItems: "center", gap: "8px",
+                                                padding: "8px 16px", borderRadius: "8px",
+                                                background: isDark ? "rgba(59, 130, 246, 0.1)" : "#eff6ff",
+                                                color: colors.accent, border: `1px solid ${colors.accent}`,
+                                                fontSize: "13px", fontWeight: 800, cursor: "pointer",
+                                            }}
+                                        >
+                                            <CheckCircle2 size={16} /> Marcar como Concluída
+                                        </button>
+                                    )}
+                                    {completedLessons[activeLesson.id] && (
+                                        <div style={{
+                                            display: "flex", alignItems: "center", gap: "8px",
+                                            padding: "8px 16px", borderRadius: "8px",
+                                            background: "none", color: "#10b981",
+                                            fontSize: "13px", fontWeight: 800
+                                        }}>
+                                            <CheckCircle2 size={16} /> Aula Concluída
+                                        </div>
+                                    )}
                                 </div>
                                 <h1 style={{ fontSize: "32px", fontWeight: 900, color: colors.text, letterSpacing: "-1px", marginBottom: "16px" }}>{activeLesson.title}</h1>
                             </div>
@@ -289,14 +342,14 @@ export default function LessonViewPage() {
                                                             width: "28px",
                                                             height: "28px",
                                                             borderRadius: "8px",
-                                                            background: isActive ? colors.accent : (isDark ? "#1e293b" : "#f1f5f9"),
+                                                            background: isActive ? colors.accent : (completedLessons[lesson.id] ? "#10b981" : (isDark ? "#1e293b" : "#f1f5f9")),
                                                             display: "flex",
                                                             alignItems: "center",
                                                             justifyContent: "center",
-                                                            color: isActive ? "white" : colors.textMuted,
+                                                            color: (isActive || completedLessons[lesson.id]) ? "white" : colors.textMuted,
                                                             flexShrink: 0
                                                         }}>
-                                                            <PlayCircle size={16} />
+                                                            {completedLessons[lesson.id] ? <CheckCircle2 size={16} /> : <PlayCircle size={16} />}
                                                         </div>
                                                         <div style={{ flex: 1 }}>
                                                             <p style={{ fontSize: "13px", fontWeight: 800, color: isActive ? colors.accent : colors.text, margin: 0 }}>{lesson.title}</p>

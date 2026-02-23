@@ -112,7 +112,11 @@ export default function LoginPage() {
         .mode-btn { cursor: pointer; transition: all 0.2s ease; }
         @media (max-width:1100px) { 
           .brand-col { display:none !important; }
-          .form-section { padding: 40px 20px !important; }
+          .form-section { flex: 1 !important; width: 100% !important; }
+        }
+        @media (max-width:600px) {
+          .login-container { padding: 20px !important; }
+          .form-box { padding: 32px 20px !important; width: 100% !important; border-radius: 20px !important; }
         }
       `}</style>
 
@@ -266,8 +270,8 @@ export default function LoginPage() {
                     </div>
 
                     {/* ── Form section ── */}
-                    <div className="form-section" style={{ flex: 0.8, display: "flex", justifyContent: "center" }}>
-                        <div style={{
+                    <div className="form-section" style={{ flex: 0.8, display: "flex", justifyContent: "center", width: "100%" }}>
+                        <div className="form-box" style={{
                             width: "100%",
                             maxWidth: "460px",
                             background: isDark ? "rgba(255,255,255,0.05)" : "white",
