@@ -98,7 +98,7 @@ export default function LoginPage() {
         <>
             <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        * { font-family: 'Inter', sans-serif; }
+        * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         @keyframes float1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(30px,-40px) scale(1.05)} }
         @keyframes float2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,30px) scale(0.95)} }
@@ -112,23 +112,24 @@ export default function LoginPage() {
         .mode-btn { cursor: pointer; transition: all 0.2s ease; }
         @media (max-width:1100px) { 
           .brand-col { display:none !important; }
-          .form-section { flex: 1 !important; width: 100% !important; }
+          .form-section { flex: 1 !important; width: 100% !important; padding: 0 !important; }
         }
         @media (max-width:600px) {
-          .login-container { padding: 20px !important; }
-          .form-box { padding: 32px 20px !important; width: 100% !important; border-radius: 20px !important; }
+          .login-container { padding: 16px !important; }
+          .form-box { padding: 32px 16px !important; width: 100% !important; border-radius: 16px !important; }
         }
       `}</style>
 
             <div style={{
                 minHeight: "100vh",
+                width: "100%",
                 display: "flex",
                 backgroundColor: colors.bg,
                 position: "relative",
                 overflow: "hidden",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: "40px",
+                padding: "20px",
                 transition: "background-color 0.3s ease",
             }}>
 
@@ -186,8 +187,9 @@ export default function LoginPage() {
                     maxWidth: "1440px",
                     zIndex: 1,
                     display: "flex",
-                    gap: "80px",
-                    alignItems: "center"
+                    gap: "40px",
+                    alignItems: "center",
+                    justifyContent: "center"
                 }}>
 
                     {/* ── Brand section ── */}
@@ -274,6 +276,7 @@ export default function LoginPage() {
                         <div className="form-box" style={{
                             width: "100%",
                             maxWidth: "460px",
+                            boxSizing: "border-box",
                             background: isDark ? "rgba(255,255,255,0.05)" : "white",
                             backdropFilter: isDark ? "blur(32px)" : "none",
                             WebkitBackdropFilter: isDark ? "blur(32px)" : "none",
