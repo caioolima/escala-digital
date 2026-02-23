@@ -51,13 +51,13 @@ export function Skeleton({
     );
 }
 
-export function SkeletonCircle({ size = 40, className = "" }: { size?: number, className?: string }) {
-    return <Skeleton width={size} height={size} borderRadius="50%" className={className} />;
+export function SkeletonCircle({ size = 40, className = "", style }: { size?: number, className?: string, style?: React.CSSProperties }) {
+    return <Skeleton width={size} height={size} borderRadius="50%" className={className} style={style} />;
 }
 
-export function SkeletonText({ lines = 3, gap = 8, className = "" }: { lines?: number, gap?: number, className?: string }) {
+export function SkeletonText({ lines = 3, gap = 8, className = "", style }: { lines?: number, gap?: number, className?: string, style?: React.CSSProperties }) {
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: `${gap}px` }} className={className}>
+        <div style={{ display: "flex", flexDirection: "column", gap: `${gap}px`, ...style }} className={className}>
             {Array.from({ length: lines }).map((_, i) => (
                 <Skeleton
                     key={i}

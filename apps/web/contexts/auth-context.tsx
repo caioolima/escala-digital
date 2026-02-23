@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const mockUser: User = {
             id: "mock-id-123",
             email,
-            name: email.split("@")[0].charAt(0).toUpperCase() + email.split("@")[0].slice(1),
+            name: (email.split("@")[0] || "User").charAt(0).toUpperCase() + (email.split("@")[0] || "user").slice(1),
             role: role,
         };
 
