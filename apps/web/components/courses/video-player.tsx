@@ -110,6 +110,7 @@ export function VideoPlayer({ url, title, onComplete, aspectRatio = "16/9", bord
                     src={url}
                     controls
                     onCanPlay={handleLoad}
+                    onEnded={onComplete}
                     style={{
                         width: "100%",
                         height: "100%",

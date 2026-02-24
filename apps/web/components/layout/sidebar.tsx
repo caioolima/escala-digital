@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useTheme } from "next-themes";
+import { motion, AnimatePresence } from "framer-motion";
 import {
     BookOpen,
     LayoutGrid,
@@ -17,10 +19,11 @@ import {
     Moon,
     ChevronLeft,
     ChevronRight,
+    Play,
 } from "lucide-react";
 
 const studentLinks = [
-    { href: "/catalog", label: "Catálogo", icon: LayoutGrid },
+    { href: "/catalog", label: "Cursos", icon: LayoutGrid },
     { href: "/trails", label: "Trilhas", icon: Map },
     { href: "/profile", label: "Meu Perfil", icon: UserIcon },
 ];
@@ -38,10 +41,15 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
+    const [mounted, setMounted] = useState(false);
     const { user, logout } = useAuth();
     const pathname = usePathname();
     const { setTheme, resolvedTheme } = useTheme();
-    const isDark = resolvedTheme === "dark";
+    const isDark = mounted && resolvedTheme === "dark";
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const isCreator = user?.role === "CREATOR";
     const links = isCreator ? creatorLinks : studentLinks;
@@ -59,16 +67,22 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     };
 
     return (
-        <aside style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            background: colors.bg,
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            position: "relative",
-            overflowX: "hidden"
-        }}>
+        <motion.aside
+            initial={{ x: -280 }}
+            animate={{ x: 0 }}
+            style={{
+                width: "100%",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                background: isDark ? "rgba(2, 6, 23, 0.4)" : "rgba(255, 255, 255, 0.4)",
+                backdropFilter: "blur(10px)",
+                borderRight: `1px solid ${colors.border}`,
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                position: "relative",
+                overflowX: "hidden"
+            }}
+        >
 
             {/* Sidebar Header with Toggle - Re-restored correctly inside sidebar */}
             <div style={{
@@ -120,27 +134,48 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                 {links.map(({ href, label, icon: Icon }) => {
                     const isActive = pathname === href;
                     return (
-                        <Link
-                            key={href}
-                            href={href}
-                            title={isCollapsed ? label : ""}
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "12px",
-                                padding: "12px 14px",
-                                justifyContent: isCollapsed ? "center" : "flex-start",
-                                borderRadius: "12px",
-                                fontSize: "14px",
-                                fontWeight: 600,
-                                textDecoration: "none",
-                                color: isActive ? colors.activeText : colors.text,
-                                background: isActive ? colors.activeBg : "transparent",
-                                transition: "all 0.2s ease",
-                            }}
-                        >
-                            <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                            {!isCollapsed && <span style={{ whiteSpace: "nowrap" }}>{label}</span>}
+                        <Link key={href} href={href} style={{ textDecoration: "none" }}>
+                            <motion.div
+                                whileHover={{ x: 8 }}
+                                whileTap={{ scale: 0.98 }}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "12px",
+                                    padding: "12px 14px",
+                                    justifyContent: isCollapsed ? "center" : "flex-start",
+                                    borderRadius: "12px",
+                                    fontSize: "14px",
+                                    fontWeight: isActive ? 800 : 600,
+                                    color: isActive ? colors.activeText : colors.text,
+                                    background: isActive ? colors.activeBg : "transparent",
+                                    border: `1px solid ${isActive ? colors.activeText + "20" : "transparent"}`,
+                                    transition: "all 0.2s ease",
+                                    position: "relative",
+                                    overflow: "hidden"
+                                }}
+                            >
+                                {isActive && (
+                                    <motion.div
+                                        layoutId="active-nav"
+                                        style={{
+                                            position: "absolute",
+                                            left: 0,
+                                            width: "4px",
+                                            height: "60%",
+                                            background: colors.activeText,
+                                            borderRadius: "0 4px 4px 0",
+                                            boxShadow: `0 0 15px ${colors.activeText}`
+                                        }}
+                                    />
+                                )}
+                                <Icon size={18} strokeWidth={isActive ? 2.5 : 2} style={{
+                                    transition: "all 0.3s ease",
+                                    color: isActive ? colors.activeText : (isDark ? "white" : "black"),
+                                    opacity: isActive ? 1 : 0.6
+                                }} />
+                                {!isCollapsed && <span style={{ whiteSpace: "nowrap" }}>{label}</span>}
+                            </motion.div>
                         </Link>
                     );
                 })}
@@ -161,9 +196,19 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                 textDecoration: "none",
                                 color: "white",
                                 background: colors.activeText,
-                                boxShadow: "0 8px 16px rgba(59,130,246,0.2)",
-                                transition: "all 0.2s ease",
+                                boxShadow: `0 8px 16px ${colors.activeText}40`,
+                                transition: "all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
                                 justifyContent: isCollapsed ? "center" : "flex-start",
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = "scale(1.05) translateY(-2px)";
+                                e.currentTarget.style.boxShadow = `0 12px 24px ${colors.activeText}60`;
+                                e.currentTarget.style.filter = "brightness(1.1)";
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = "scale(1) translateY(0)";
+                                e.currentTarget.style.boxShadow = `0 8px 16px ${colors.activeText}40`;
+                                e.currentTarget.style.filter = "brightness(1)";
                             }}
                         >
                             <PlusCircle size={18} />
@@ -269,6 +314,6 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     {!isCollapsed && <span>Sair da Conta</span>}
                 </button>
             </div>
-        </aside>
+        </motion.aside>
     );
 }

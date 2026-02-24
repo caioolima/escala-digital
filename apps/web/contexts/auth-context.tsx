@@ -7,6 +7,7 @@ interface User {
     id: string;
     email: string;
     name: string;
+    company?: string;
     role: "CREATOR" | "STUDENT";
 }
 
@@ -39,7 +40,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const mockUser: User = {
             id: "mock-id-123",
             email,
-            name: (email.split("@")[0] || "User").charAt(0).toUpperCase() + (email.split("@")[0] || "user").slice(1),
+            name: email === "dev.pedrodahmer@gmail.com" ? "Dev Pedro Dahmer" : ((email.split("@")[0] || "User").charAt(0).toUpperCase() + (email.split("@")[0] || "user").slice(1)),
+            company: "Empresa Platinum",
             role: role,
         };
 
