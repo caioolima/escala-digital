@@ -50,9 +50,17 @@ export default function LoginPage() {
         setLoading(true);
         setError("");
         try {
-            await login(email, password, mode === "student" ? "STUDENT" : "CREATOR");
+            const requiredRole = mode === "student" ? "STUDENT" : "CREATOR";
+            await login(email, password, requiredRole);
         } catch (err: any) {
-            setError("E-mail ou senha inválidos");
+            if (err.message?.startsWith("RESTRICTED_ROLE:")) {
+                const role = err.message.split(":")[1];
+                setError(role === "CREATOR"
+                    ? "Esta conta tem acesso corporativo. Por favor, use o login de Gestor."
+                    : "Esta conta é de aluno. Por favor, use o login de Aluno.");
+            } else {
+                setError("E-mail ou senha inválidos. Verifique suas credenciais.");
+            }
         } finally {
             setLoading(false);
         }

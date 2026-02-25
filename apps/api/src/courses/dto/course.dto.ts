@@ -17,7 +17,15 @@ export class CreateCourseDto {
 
     @IsString()
     @IsOptional()
+    category?: string;
+
+    @IsString()
+    @IsOptional()
     thumbnail?: string;
+
+    @IsNumber()
+    @IsOptional()
+    rating?: number;
 
     @IsString()
     @IsOptional()
@@ -35,7 +43,15 @@ export class UpdateCourseDto {
 
     @IsString()
     @IsOptional()
+    category?: string;
+
+    @IsString()
+    @IsOptional()
     thumbnail?: string;
+
+    @IsNumber()
+    @IsOptional()
+    rating?: number;
 
     @IsString()
     @IsOptional()

@@ -1,0 +1,126 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CREATOR
+  STUDENT
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+  users     User[]
+  courses   Course[]
+  trails    Trail[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id          String           @id @default(cuid())
+  email       String           @unique
+  name        String
+  password    String
+  avatarUrl   String?
+  role        Role             @default(STUDENT)
+  companyId   String
+  company     Company          @relation(fields: [companyId], references: [id])
+  enrollments Enrollment[]
+  progress    LessonProgress[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Course {
+  id           String        @id @default(cuid())
+  title        String
+  description  String
+  category     String?
+  thumbnail    String?
+  level        String? // beginner | intermediate | advanced
+  durationMins Int           @default(0)
+  rating       Float         @default(4.5)
+  published    Boolean       @default(false)
+  companyId    String
+  company      Company       @relation(fields: [companyId], references: [id])
+  lessons      Lesson[]
+  trails       TrailCourse[]
+  enrollments  Enrollment[]
+  tags         Tag[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Lesson {
+  id          String           @id @default(cuid())
+  title       String
+  description String?
+  videoUrl    String
+  duration    Int              @default(0) // em segundos
+  order       Int
+  courseId    String
+  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress    LessonProgress[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Trail {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  thumbnail   String?
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id])
+  courses     TrailCourse[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model TrailCourse {
+  trailId  String
+  courseId String
+  order    Int
+  trail    Trail  @relation(fields: [trailId], references: [id], onDelete: Cascade)
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@id([trailId, courseId])
+}
+
+model Enrollment {
+  userId     String
+  courseId   String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrolledAt DateTime @default(now())
+
+  @@id([userId, courseId])
+}
+
+model LessonProgress {
+  userId    String
+  lessonId  String
+  completed Boolean  @default(false)
+  watchedAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@id([userId, lessonId])
+}
+
+model Tag {
+  id      String   @id @default(cuid())
+  name    String   @unique
+  courses Course[]
+}

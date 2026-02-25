@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "next-themes";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
 
 interface Course {
     id: string;
@@ -70,6 +71,7 @@ export default function CatalogPage() {
     const [isMobile, setIsMobile] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [courses, setCourses] = useState<Course[]>([]);
+    const [myEnrollments, setMyEnrollments] = useState<string[]>([]);
     const [featuredStarted, setFeaturedStarted] = useState(false);
     const [activeFilter, setActiveFilter] = useState<"all" | "started">("all");
 
@@ -79,83 +81,45 @@ export default function CatalogPage() {
         checkMobile();
         window.addEventListener("resize", checkMobile);
 
-        try {
-            const storedCourses: Course[] = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-            // Map the stored courses to handle missing UI properties gracefully
-            const mappedCourses = storedCourses.map(c => ({
-                ...c,
-                level: c.level || "intermediate",
-                durationMins: c.durationMins || 120,
-                lessonsCount: c.lessonsCount || 10,
-                studentsCount: c.studentsCount || Math.floor(Math.random() * 500) + 10,
-                rating: c.rating || 4.5 + Math.random() * 0.5
-            }));
-            const dummyCourses: Course[] = [
-                {
-                    id: "dummy-1",
-                    title: "Masterclass: High-Performance Marketing",
-                    description: "Aprenda as estratégias mais avançadas de growth hacking e marketing digital para escalar seu negócio em tempo recorde.",
-                    category: "Marketing",
-                    thumbnail: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=2026&auto=format&fit=crop",
-                    level: "advanced",
-                    durationMins: 480,
-                    lessonsCount: 24,
-                    studentsCount: 1240,
-                    rating: 4.9,
-                    status: "published"
-                },
-                {
-                    id: "dummy-2",
-                    title: "Design de Interfaces Modernas",
-                    description: "Descubra como criar UIs surreais e experiências de usuário que encantam seus clientes em cada interação.",
-                    category: "Design",
-                    thumbnail: "https://images.unsplash.com/photo-1558655146-d09347e92766?q=80&w=1964&auto=format&fit=crop",
-                    level: "intermediate",
-                    durationMins: 360,
-                    lessonsCount: 18,
-                    studentsCount: 856,
-                    rating: 4.8,
-                    status: "published"
-                },
-                {
-                    id: "dummy-3",
-                    title: "Estratégia de Vendas e CRM",
-                    description: "O guia definitivo para gerenciar pipelines complexos e fechar negócios de alto valor de forma sistemática.",
-                    category: "Vendas",
-                    thumbnail: "https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=2070&auto=format&fit=crop",
-                    level: "beginner",
-                    durationMins: 240,
-                    lessonsCount: 12,
-                    studentsCount: 2100,
-                    rating: 4.7,
-                    status: "published"
+        const fetchCourses = async () => {
+            setIsLoading(true);
+            try {
+                const response = await api.get("/courses");
+                const data = response.data;
+
+                // If backend returns empty, we can still use dummy for visual dev if needed
+                // but for now let's trust the seeded API
+                setCourses(data);
+
+                // Check featured course progress
+                if (data.length > 0) {
+                    const progress: Record<string, number | undefined> = JSON.parse(localStorage.getItem("student_progress") || "{}");
+                    const fId = data[0]?.id;
+                    if (fId && progress[fId] && (progress[fId] ?? 0) > 0) {
+                        setFeaturedStarted(true);
+                    }
                 }
-            ];
 
-            if (storedCourses.length === 0) {
-                setCourses(dummyCourses);
-            } else {
-                setCourses(mappedCourses);
-            }
-
-            // Check featured course progress
-            const initialCourses = storedCourses.length === 0 ? dummyCourses : mappedCourses;
-            if (initialCourses.length > 0) {
-                const progress: Record<string, number | undefined> = JSON.parse(localStorage.getItem("student_progress") || "{}");
-                const fId = initialCourses[0]?.id;
-                if (fId && progress[fId] && (progress[fId] ?? 0) > 0) {
-                    setFeaturedStarted(true);
+                // Fetch real enrollments
+                try {
+                    const enrollResp = await api.get("/enrollments/me");
+                    const enrollments = enrollResp.data; // List of enrollments with course object
+                    setMyEnrollments(enrollments.map((e: any) => e.courseId));
+                } catch (e) {
+                    console.error("Failed to fetch enrollments", e);
                 }
+            } catch (e) {
+                console.error("Failed to fetch courses:", e);
+                // Fallback to empty or dummy if absolutely needed
+            } finally {
+                setIsLoading(false);
             }
-        } catch (e) {
-            console.error(e);
-        }
+        };
 
-        const timer = setTimeout(() => setIsLoading(false), 800);
+        fetchCourses();
 
         return () => {
             window.removeEventListener("resize", checkMobile);
-            clearTimeout(timer);
         };
     }, []);
 
@@ -168,8 +132,7 @@ export default function CatalogPage() {
             (c.description || "").toLowerCase().includes(search.toLowerCase());
 
         if (activeFilter === "started") {
-            const progress: Record<string, number | undefined> = JSON.parse(localStorage.getItem("student_progress") || "{}");
-            return matchesSearch && progress[c.id] && (progress[c.id] ?? 0) > 0;
+            return matchesSearch && myEnrollments.includes(c.id);
         }
 
         return matchesSearch;

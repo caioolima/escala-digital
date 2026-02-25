@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
 
 interface User {
     id: string;
@@ -14,7 +15,7 @@ interface User {
 interface AuthContextType {
     user: User | null;
     loading: boolean;
-    login: (email: string, password: string, role?: "CREATOR" | "STUDENT") => Promise<void>;
+    login: (email: string, password: string, role: "CREATOR" | "STUDENT") => Promise<void>;
     logout: () => void;
 }
 
@@ -26,38 +27,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
-        const savedUser = localStorage.getItem("mock_user");
-        if (savedUser) {
-            setUser(JSON.parse(savedUser));
-        }
-        setLoading(false);
+        const checkAuth = async () => {
+            const token = localStorage.getItem("access_token");
+            if (token) {
+                try {
+                    const response = await api.get("/auth/me");
+                    setUser(response.data);
+                } catch (e) {
+                    console.error("Failed to restore session", e);
+                    localStorage.removeItem("access_token");
+                }
+            }
+            setLoading(false);
+        };
+        checkAuth();
     }, []);
 
-    const login = async (email: string, password: string, role: "CREATOR" | "STUDENT" = "STUDENT") => {
-        // Mocking API delay
-        await new Promise((resolve) => setTimeout(resolve, 800));
+    const login = async (email: string, password: string, requiredRole: "CREATOR" | "STUDENT") => {
+        try {
+            const response = await api.post("/auth/login", { email, password });
+            const { access_token, role: userRole } = response.data;
 
-        const mockUser: User = {
-            id: "mock-id-123",
-            email,
-            name: email === "dev.pedrodahmer@gmail.com" ? "Dev Pedro Dahmer" : ((email.split("@")[0] || "User").charAt(0).toUpperCase() + (email.split("@")[0] || "user").slice(1)),
-            company: "Empresa Platinum",
-            role: role,
-        };
+            // Check if the user's role matches the required role for this login form
+            if (userRole !== requiredRole) {
+                throw new Error(`RESTRICTED_ROLE:${userRole}`);
+            }
 
-        localStorage.setItem("mock_user", JSON.stringify(mockUser));
-        localStorage.setItem("access_token", "mock-jwt-token");
-        setUser(mockUser);
+            localStorage.setItem("access_token", access_token);
 
-        if (role === "CREATOR") {
-            router.push("/creator/dashboard");
-        } else {
-            router.push("/catalog");
+            // Fetch complete user profile after login
+            const userResponse = await api.get("/auth/me");
+            const userData = userResponse.data;
+            setUser(userData);
+
+            if (userData.role === "CREATOR") {
+                router.push("/creator/dashboard");
+            } else {
+                router.push("/catalog");
+            }
+        } catch (e: any) {
+            if (e.message?.startsWith("RESTRICTED_ROLE:")) {
+                throw e;
+            }
+            throw new Error("Invalid credentials");
         }
     };
 
     const logout = () => {
-        localStorage.removeItem("mock_user");
         localStorage.removeItem("access_token");
         setUser(null);
         router.push("/login");

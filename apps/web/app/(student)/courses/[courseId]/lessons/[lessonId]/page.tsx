@@ -25,6 +25,7 @@ import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/contexts/toast-context";
+import { api } from "@/lib/api";
 
 interface Lesson {
     id: string;
@@ -75,43 +76,57 @@ export default function LessonViewPage() {
         checkMobile();
         window.addEventListener("resize", checkMobile);
 
-        try {
-            const storedCourses: Course[] = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-            const foundCourse = storedCourses.find(c => c.id === courseId);
-
-            if (foundCourse) {
+        const fetchLessonData = async () => {
+            setIsLoading(true);
+            try {
+                // Fetch course details with modules/lessons from API
+                const response = await api.get(`/courses/${courseId}`);
+                const foundCourse = response.data;
                 setCourse(foundCourse);
 
                 // Flatten lessons from all modules for easier navigation
                 const lessonsList: Lesson[] = [];
-                foundCourse.modules?.forEach(mod => {
-                    if (mod.lessons) {
-                        lessonsList.push(...mod.lessons);
-                    }
-                });
+                if (foundCourse.modules && foundCourse.modules.length > 0) {
+                    foundCourse.modules.forEach((mod: any) => {
+                        if (mod.lessons) {
+                            lessonsList.push(...mod.lessons);
+                        }
+                    });
+                } else if (foundCourse.lessons) {
+                    lessonsList.push(...foundCourse.lessons);
+                }
 
                 setAllLessons(lessonsList);
 
                 const currentLesson = lessonsList.find(l => l.id === lessonId) || lessonsList[0];
                 setActiveLesson(currentLesson || null);
+
+                // Fetch real progress from API
+                const progressResp = await api.get(`/courses/${courseId}/progress`);
+                const progressData = progressResp.data;
+
+                const completedMap: Record<string, boolean> = {};
+                progressData.completedLessonIds?.forEach((id: string) => {
+                    completedMap[id] = true;
+                });
+                setCompletedLessons(completedMap);
+
+                // Finish status based on all lessons completed + hasReviewed
+                const allDone = lessonsList.length > 0 && lessonsList.every(l => completedMap[l.id]);
+                setIsCourseFinished(allDone);
+                setHasEvaluated(foundCourse.hasReviewed || false);
+            } catch (e) {
+                console.error("Failed to load lesson data", e);
+            } finally {
+                setIsLoading(false);
             }
+        };
 
-            const storedCompleted: Record<string, boolean> = JSON.parse(localStorage.getItem("student_completed_lessons") || "{}");
-            setCompletedLessons(storedCompleted);
-
-            const finished = localStorage.getItem(`course_finished_${courseId}`) === "true";
-            setIsCourseFinished(finished);
-
-            const evaluated = localStorage.getItem(`course_evaluated_${courseId}`) === "true";
-            setHasEvaluated(evaluated);
-
-        } catch (e) {
-            console.error("Failed to load course", e);
+        if (courseId && lessonId) {
+            fetchLessonData();
         }
 
-        const timer = setTimeout(() => setIsLoading(false), 800);
         return () => {
-            clearTimeout(timer);
             window.removeEventListener("resize", checkMobile);
         };
     }, [courseId, lessonId]);
@@ -154,27 +169,27 @@ export default function LessonViewPage() {
         }
     };
 
-    const handleLessonComplete = () => {
+    const handleLessonComplete = async () => {
         if (!activeLesson) return;
 
-        const updatedCompleted = { ...completedLessons, [activeLesson.id]: true };
-        setCompletedLessons(updatedCompleted);
-        localStorage.setItem("student_completed_lessons", JSON.stringify(updatedCompleted));
+        try {
+            // Call completion API
+            await api.post(`/courses/${courseId}/lessons/${activeLesson.id}/complete`);
 
-        // Recalculate course progress
-        if (allLessons.length > 0) {
-            const courseCompletedCount = allLessons.filter(l => updatedCompleted[l.id]).length;
-            const progressPercentage = Math.round((courseCompletedCount / allLessons.length) * 100);
+            const updatedCompleted = { ...completedLessons, [activeLesson.id]: true };
+            setCompletedLessons(updatedCompleted);
 
-            const storedProgress: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
-            storedProgress[courseId] = progressPercentage;
-            localStorage.setItem("student_progress", JSON.stringify(storedProgress));
+            // local state backup for instant feedback
+            localStorage.setItem("student_completed_lessons", JSON.stringify(updatedCompleted));
+
             showToast("Aula Concluída!", "success");
-        }
 
-        // Auto advance if there's a next lesson
-        if (hasNextLesson) {
-            handleNextLesson();
+            // Auto advance
+            if (hasNextLesson) {
+                handleNextLesson();
+            }
+        } catch (e) {
+            console.error("Failed to mark lesson complete", e);
         }
     };
 
@@ -183,34 +198,30 @@ export default function LessonViewPage() {
         setShowEvaluation(true);
     };
 
-    const handleSaveEvaluation = () => {
-        localStorage.setItem(`course_finished_${courseId}`, "true");
-        setIsCourseFinished(true);
-        localStorage.setItem(`course_evaluated_${courseId}`, "true");
-        setHasEvaluated(true);
-        setShowEvaluation(false);
+    const handleSaveEvaluation = async () => {
+        if (rating === 0) return;
 
-        // Here we could also save the rating/comment to a global "reviews" store
-        const existingReviews = JSON.parse(localStorage.getItem("course_reviews") || "[]");
-        existingReviews.push({
-            courseId,
-            userId: user?.id,
-            userName: user?.name,
-            rating,
-            comment: evaluationText,
-            date: new Date().toISOString()
-        });
-        localStorage.setItem("course_reviews", JSON.stringify(existingReviews));
+        try {
+            await api.post(`/reviews/${courseId}`, {
+                rating,
+                comment: evaluationText
+            });
 
-        // Redirect to dashboard after finishing
-        showToast("Curso Finalizado! Parabéns.", "premium");
-        showToast("Feedback Enviado! Obrigado.", "success");
-        router.push("/dashboard");
+            setHasEvaluated(true);
+            setShowEvaluation(false);
+
+            showToast("Curso Finalizado! Parabéns.", "premium");
+            showToast("Feedback Enviado! Obrigado.", "success");
+            router.push("/dashboard");
+        } catch (e) {
+            console.error("Failed to save evaluation", e);
+            showToast("Erro ao enviar avaliação. Tente novamente.", "error");
+        }
     };
 
     const isLastLesson = currentLessonIndex === allLessons.length - 1;
     const allLessonsCompleted = allLessons.length > 0 && allLessons.every(l => completedLessons[l.id]);
-    const canFinishCourse = isLastLesson && allLessonsCompleted && !isCourseFinished;
+    const canFinishCourse = isLastLesson && allLessonsCompleted && !hasEvaluated;
 
     return (
         <div style={{ background: colors.bg, minHeight: "100%", display: "flex", flexDirection: "column" }}>

@@ -40,7 +40,7 @@ export class CoursesController {
 
     @Get(':id')
     findOne(@CurrentUser() user: any, @Param('id') id: string) {
-        return this.coursesService.findOne(id, user.companyId);
+        return this.coursesService.findOne(id, user.companyId, user.id);
     }
 
     @Get(':id/progress')

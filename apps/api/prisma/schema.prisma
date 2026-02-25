@@ -38,6 +38,7 @@ model User {
   company      Company          @relation(fields: [companyId], references: [id])
   enrollments  Enrollment[]
   progress     LessonProgress[]
+  reviews      Review[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 }
@@ -46,15 +47,19 @@ model Course {
   id           String        @id @default(cuid())
   title        String
   description  String
+  category     String?
   thumbnail    String?
   level        String?       // beginner | intermediate | advanced
   durationMins Int           @default(0)
+  rating       Float         @default(4.5)
   published    Boolean       @default(false)
   companyId    String
   company      Company       @relation(fields: [companyId], references: [id])
+  modules      Module[]
   lessons      Lesson[]
   trails       TrailCourse[]
   enrollments  Enrollment[]
+  reviews      Review[]
   tags         Tag[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -67,11 +72,24 @@ model Lesson {
   videoUrl    String
   duration    Int              @default(0) // em segundos
   order       Int
+  moduleId    String?
+  module      Module?          @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   courseId    String
   course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
   progress    LessonProgress[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
+}
+
+model Module {
+  id        String   @id @default(cuid())
+  title     String
+  order     Int
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons   Lesson[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Trail {
@@ -115,6 +133,18 @@ model LessonProgress {
   lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@id([userId, lessonId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rating    Float
+  comment   String
+  userId    String
+  courseId  String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Tag {

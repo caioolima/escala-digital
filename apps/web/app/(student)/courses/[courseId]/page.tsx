@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,14 @@ interface Module {
     lessons: Lesson[];
 }
 
+interface Review {
+    id: string;
+    rating: number;
+    comment: string;
+    user: { name: string; avatarUrl: string | null };
+    createdAt: string;
+}
+
 interface Course {
     id: string;
     title: string;
@@ -48,7 +57,11 @@ interface Course {
     studentsCount: number;
     rating: number;
     modules?: Module[];
+    lessons?: Lesson[];
+    reviews?: Review[];
     updatedAt?: string;
+    isEnrolled?: boolean;
+    enrolledStudents?: { name: string; avatarUrl: string | null }[];
 }
 
 function DetailsSkeleton() {
@@ -83,68 +96,62 @@ export default function CourseDetailsPage() {
     const [mounted, setMounted] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [course, setCourse] = useState<Course | null>(null);
-    const [isStarted, setIsStarted] = useState(false);
+    const [isEnrolled, setIsEnrolled] = useState(false);
     const [progress, setProgress] = useState(0);
 
     useEffect(() => {
         setMounted(true);
-        try {
-            // Fetch detailed course data
-            const fullCourseRaw = localStorage.getItem(`course_${courseId}`);
-            const summaryList: Course[] = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-            const summary = summaryList.find(c => c.id === courseId);
 
-            if (fullCourseRaw) {
-                const data = JSON.parse(fullCourseRaw);
-                const modules = data.modules || summary?.modules || [];
-                const calcLessonsCount = modules.reduce((acc: number, mod: any) => acc + (mod.lessons?.length || 0), 0);
+        const fetchCourseDetails = async () => {
+            setIsLoading(true);
+            try {
+                const response = await api.get(`/courses/${courseId}`);
+                const data = response.data;
 
-                setCourse({
-                    ...data,
-                    modules,
-                    // Merge summary stats if missing in full detail
-                    durationMins: data.durationMins || summary?.durationMins || 120,
-                    lessonsCount: calcLessonsCount || data.lessonsCount || summary?.lessonsCount || 0,
-                    studentsCount: data.studentsCount || summary?.studentsCount || 0,
-                    rating: data.rating || summary?.rating || 4.8
-                });
-            } else if (summary) {
-                setCourse(summary);
+                // NestJS API should return the full course with lessons/modules/enrollment
+                setCourse(data);
+
+                if (data.isEnrolled) {
+                    setIsEnrolled(true);
+                }
+
+                // Check progress via API
+                try {
+                    const progressResp = await api.get(`/courses/${courseId}/progress`);
+                    setProgress(progressResp.data.percentage);
+                } catch (pe) {
+                    console.error("Failed to load progress", pe);
+                }
+            } catch (e) {
+                console.error("Failed to load course details", e);
+            } finally {
+                setIsLoading(false);
             }
+        };
 
-            // Check if student has already started the course
-            const progressData: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
-            const currentProgress = progressData[courseId] || 0;
-            setProgress(currentProgress);
-            if (currentProgress > 0) {
-                setIsStarted(true);
-            }
-        } catch (e) {
-            console.error("Failed to load course details", e);
+        if (courseId) {
+            fetchCourseDetails();
         }
-
-        const timer = setTimeout(() => setIsLoading(false), 800);
-        return () => clearTimeout(timer);
     }, [courseId]);
 
-    const handleStartCourse = () => {
-        if (!course || !course.modules || course.modules.length === 0) return;
+    const handleStartCourse = async () => {
+        if (!course) return;
 
-        // Save enrollment if it's the first time
         try {
-            const progress: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
-            if (!progress[courseId]) {
-                progress[courseId] = 1; // Initial progress to show in dashboard
-                localStorage.setItem("student_progress", JSON.stringify(progress));
+            // Only enroll if not already enrolled
+            if (!course.isEnrolled) {
+                await api.post(`/enrollments/${courseId}`);
                 showToast("Jornada Iniciada! Bons estudos.", "premium");
             }
         } catch (e) {
-            console.error("Failed to save progress", e);
+            console.error("Failed to enroll", e);
         }
 
-        const firstLessonId = course.modules[0]?.lessons[0]?.id;
+        const firstLessonId = course.lessons?.[0]?.id || course.modules?.[0]?.lessons?.[0]?.id;
         if (firstLessonId) {
             router.push(`/courses/${courseId}/lessons/${firstLessonId}`);
+        } else {
+            showToast("Conteúdo em preparação. Volte em breve!", "premium");
         }
     };
 
@@ -250,8 +257,38 @@ export default function CourseDetailsPage() {
                     <section>
                         <h2 style={{ fontSize: "24px", fontWeight: 900, marginBottom: "20px", color: colors.text }}>Grade Curricular</h2>
                         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                            {course.modules?.map((mod, idx) => (
-                                <div key={mod.id} style={{
+                            {course.modules && course.modules.length > 0 ? (
+                                course.modules.map((mod, idx) => (
+                                    <div key={mod.id} style={{
+                                        padding: "20px",
+                                        borderRadius: "20px",
+                                        background: colors.card,
+                                        border: `1px solid ${colors.border}`,
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "16px"
+                                    }}>
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                                <div style={{ width: "32px", height: "32px", borderRadius: "10px", background: `${colors.accent}20`, color: colors.accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "14px" }}>
+                                                    {idx + 1}
+                                                </div>
+                                                <h3 style={{ fontSize: "16px", fontWeight: 800, margin: 0 }}>{mod.title}</h3>
+                                            </div>
+                                            <Badge variant="outline">{mod.lessons.length} aulas</Badge>
+                                        </div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingLeft: "44px" }}>
+                                            {mod.lessons.map((lesson, lIdx) => (
+                                                <div key={lesson.id} style={{ display: "flex", alignItems: "center", gap: "10px", color: colors.textMuted, fontSize: "14px", fontWeight: 500 }}>
+                                                    <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: colors.border }} />
+                                                    <span>{lIdx + 1}. {lesson.title}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : course.lessons && course.lessons.length > 0 ? (
+                                <div style={{
                                     padding: "20px",
                                     borderRadius: "20px",
                                     background: colors.card,
@@ -263,14 +300,14 @@ export default function CourseDetailsPage() {
                                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                                             <div style={{ width: "32px", height: "32px", borderRadius: "10px", background: `${colors.accent}20`, color: colors.accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "14px" }}>
-                                                {idx + 1}
+                                                1
                                             </div>
-                                            <h3 style={{ fontSize: "16px", fontWeight: 800, margin: 0 }}>{mod.title}</h3>
+                                            <h3 style={{ fontSize: "16px", fontWeight: 800, margin: 0 }}>Conteúdo do Curso</h3>
                                         </div>
-                                        <Badge variant="outline">{mod.lessons.length} aulas</Badge>
+                                        <Badge variant="outline">{course.lessons.length} aulas</Badge>
                                     </div>
                                     <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingLeft: "44px" }}>
-                                        {mod.lessons.map((lesson, lIdx) => (
+                                        {course.lessons.map((lesson, lIdx) => (
                                             <div key={lesson.id} style={{ display: "flex", alignItems: "center", gap: "10px", color: colors.textMuted, fontSize: "14px", fontWeight: 500 }}>
                                                 <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: colors.border }} />
                                                 <span>{lIdx + 1}. {lesson.title}</span>
@@ -278,8 +315,7 @@ export default function CourseDetailsPage() {
                                         ))}
                                     </div>
                                 </div>
-                            ))}
-                            {(!course.modules || course.modules.length === 0) && (
+                            ) : (
                                 <div style={{ textAlign: "center", padding: "40px", border: `2px dashed ${colors.border}`, borderRadius: "20px", color: colors.textMuted }}>
                                     Conteúdo em breve
                                 </div>
@@ -297,21 +333,23 @@ export default function CourseDetailsPage() {
                             </div>
                         </h2>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "20px" }}>
-                            {[
-                                { name: "Carlos Silva", date: "Há 2 dias", rating: 5, comment: "Conteúdo extremamente prático e direto ao ponto. Consegui aplicar já no primeiro dia!" },
-                                { name: "Mariana Costa", date: "Há 1 semana", rating: 5, comment: "O melhor treinamento que já fiz sobre o assunto. A didática do instrutor é impecável." },
-                                { name: "João Pedro", date: "Há 2 semanas", rating: 4, comment: "Muito bom, as aulas são bem explicadas. Só senti falta de materiais extras em PDF." }
-                            ].map((review, i) => (
-                                <Card key={i} style={{ borderRadius: "20px", background: colors.card, border: `1px solid ${colors.border}` }}>
+                            {course.reviews?.map((review) => (
+                                <Card key={review.id} style={{ borderRadius: "20px", background: colors.card, border: `1px solid ${colors.border}` }}>
                                     <CardContent style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: colors.accent + "20", color: colors.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                                    <User size={16} />
+                                                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: colors.accent + "20", color: colors.accent, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                                                    {review.user.avatarUrl ? (
+                                                        <img src={review.user.avatarUrl} alt={review.user.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                                    ) : (
+                                                        <User size={16} />
+                                                    )}
                                                 </div>
-                                                <span style={{ fontWeight: 800, fontSize: "14px" }}>{review.name}</span>
+                                                <span style={{ fontWeight: 800, fontSize: "14px" }}>{review.user.name}</span>
                                             </div>
-                                            <span style={{ fontSize: "12px", color: colors.textMuted }}>{review.date}</span>
+                                            <span style={{ fontSize: "12px", color: colors.textMuted }}>
+                                                {new Date(review.createdAt).toLocaleDateString('pt-BR')}
+                                            </span>
                                         </div>
                                         <div style={{ display: "flex", gap: "2px" }}>
                                             {Array.from({ length: 5 }).map((_, j) => (
@@ -324,6 +362,11 @@ export default function CourseDetailsPage() {
                                     </CardContent>
                                 </Card>
                             ))}
+                            {(!course.reviews || course.reviews.length === 0) && (
+                                <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px", color: colors.textMuted }}>
+                                    Ainda não há avaliações para este curso.
+                                </div>
+                            )}
                         </div>
                     </section>
                 </div>
@@ -356,7 +399,7 @@ export default function CourseDetailsPage() {
                                 ) : (
                                     <>
                                         <Play size={20} fill="currentColor" style={{ marginRight: "10px" }} />
-                                        {isStarted ? "Continuar treinando" : "Iniciar agora"}
+                                        {course.isEnrolled ? "Continuar treinando" : "Iniciar agora"}
                                     </>
                                 )}
                             </Button>
@@ -372,7 +415,7 @@ export default function CourseDetailsPage() {
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: "12px", color: colors.text, fontWeight: 700, fontSize: "14px" }}>
                                     <Calendar size={18} color={colors.textMuted} />
-                                    <span>Atualizado: {course.updatedAt || "Recém publicado"}</span>
+                                    <span>Atualizado: {course.updatedAt ? new Date(course.updatedAt).toLocaleDateString() : "Recém publicado"}</span>
                                 </div>
                             </div>
 
@@ -380,27 +423,54 @@ export default function CourseDetailsPage() {
                                 <h4 style={{ fontSize: "14px", fontWeight: 900, marginBottom: "16px", color: colors.text }}>Alunos que já iniciaram</h4>
                                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                                     <div style={{ display: "flex", alignItems: "center" }}>
-                                        {[1, 2, 3, 4, 5].map((i) => (
-                                            <div
-                                                key={i}
-                                                style={{
-                                                    width: "32px",
-                                                    height: "32px",
-                                                    borderRadius: "50%",
-                                                    border: `3px solid ${colors.card}`,
-                                                    marginLeft: i === 1 ? 0 : "-12px",
-                                                    background: `hsl(${i * 60}, 70%, 50%)`,
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                    color: "white",
-                                                    boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-                                                    zIndex: 10 - i
-                                                }}
-                                            >
-                                                <User size={16} />
-                                            </div>
-                                        ))}
+                                        {course.enrolledStudents && course.enrolledStudents.length > 0 ? (
+                                            course.enrolledStudents.slice(0, 5).map((student, i) => (
+                                                <div
+                                                    key={i}
+                                                    style={{
+                                                        width: "32px",
+                                                        height: "32px",
+                                                        borderRadius: "50%",
+                                                        border: `3px solid ${colors.card}`,
+                                                        marginLeft: i === 0 ? 0 : "-12px",
+                                                        background: colors.accent + "20",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                        overflow: "hidden",
+                                                        boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+                                                        zIndex: 10 - i
+                                                    }}
+                                                >
+                                                    {student.avatarUrl ? (
+                                                        <img src={student.avatarUrl} alt={student.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                                    ) : (
+                                                        <User size={16} color={colors.accent} />
+                                                    )}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            [1, 2, 3].map((i) => (
+                                                <div
+                                                    key={i}
+                                                    style={{
+                                                        width: "32px",
+                                                        height: "32px",
+                                                        borderRadius: "50%",
+                                                        border: `3px solid ${colors.card}`,
+                                                        marginLeft: i === 1 ? 0 : "-12px",
+                                                        background: `hsl(${i * 60}, 70%, 50%)`,
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                        color: "white",
+                                                        zIndex: 10 - i
+                                                    }}
+                                                >
+                                                    <User size={16} />
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
                                     {course.studentsCount > 5 && (
                                         <span style={{ fontSize: "13px", fontWeight: 700, color: colors.textMuted }}>+{course.studentsCount - 5} alunos</span>

@@ -20,31 +20,78 @@ export class CoursesService {
     }
 
     async findAll(companyId: string, onlyPublished = false) {
-        return this.prisma.course.findMany({
+        const courses = await this.prisma.course.findMany({
             where: {
                 companyId,
                 ...(onlyPublished && { published: true }),
             },
             include: {
-                lessons: { select: { id: true, title: true, order: true, duration: true } },
-                tags: true,
+                lessons: { select: { id: true } },
                 _count: { select: { enrollments: true } },
             },
             orderBy: { createdAt: 'desc' },
         });
+
+        return courses.map(course => ({
+            ...course,
+            lessonsCount: course.lessons.length,
+            studentsCount: course._count.enrollments,
+            status: 'available', // Default status, logic can be added later
+        }));
     }
 
-    async findOne(id: string, companyId: string) {
+    async findOne(id: string, companyId: string, userId?: string) {
         const course = await this.prisma.course.findFirst({
             where: { id, companyId },
             include: {
+                modules: {
+                    include: { lessons: { orderBy: { order: 'asc' } } },
+                    orderBy: { order: 'asc' },
+                },
                 lessons: { orderBy: { order: 'asc' } },
                 tags: true,
                 _count: { select: { enrollments: true } },
+                reviews: {
+                    include: { user: { select: { name: true, avatarUrl: true } } },
+                    orderBy: { createdAt: 'desc' },
+                    take: 5,
+                },
+                enrollments: {
+                    include: { user: { select: { name: true, avatarUrl: true } } },
+                    orderBy: { enrolledAt: 'desc' },
+                    take: 10,
+                }
             },
         });
         if (!course) throw new NotFoundException('Course not found');
-        return course;
+
+        let isEnrolled = false;
+        let hasReviewed = false;
+        if (userId) {
+            const [enrollment, review] = await Promise.all([
+                this.prisma.enrollment.findUnique({
+                    where: { userId_courseId: { userId, courseId: id } }
+                }),
+                this.prisma.review.findFirst({
+                    where: { userId, courseId: id }
+                })
+            ]);
+            isEnrolled = !!enrollment;
+            hasReviewed = !!review;
+        }
+
+        return {
+            ...course,
+            lessonsCount: course.lessons.length,
+            studentsCount: course._count.enrollments,
+            enrolledStudents: course.enrollments.map((e: any) => ({
+                name: e.user.name,
+                avatarUrl: e.user.avatarUrl
+            })),
+            isEnrolled,
+            hasReviewed,
+            status: 'available',
+        };
     }
 
     async update(id: string, companyId: string, dto: UpdateCourseDto) {
@@ -67,16 +114,21 @@ export class CoursesService {
         });
         if (!course) throw new NotFoundException('Course not found');
 
-        const completedLessons = await this.prisma.lessonProgress.count({
+        const completedLessons = await this.prisma.lessonProgress.findMany({
             where: { userId, lessonId: { in: course.lessons.map((l) => l.id) }, completed: true },
+            select: { lessonId: true }
         });
+
+        const completedCount = completedLessons.length;
+        const percentage = course.lessons.length > 0
+            ? Math.round((completedCount / course.lessons.length) * 100)
+            : 0;
 
         return {
             total: course.lessons.length,
-            completed: completedLessons,
-            percentage: course.lessons.length > 0
-                ? Math.round((completedLessons / course.lessons.length) * 100)
-                : 0,
+            completed: completedCount,
+            percentage,
+            completedLessonIds: completedLessons.map(lp => lp.lessonId)
         };
     }
 }
