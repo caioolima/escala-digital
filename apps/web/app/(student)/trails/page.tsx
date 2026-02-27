@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -66,7 +66,6 @@ export default function TrailsCatalogPage() {
     const [isMobile, setIsMobile] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [trails, setTrails] = useState<Trail[]>([]);
-    const [myEnrollments, setMyEnrollments] = useState<string[]>([]);
     const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
     const [search, setSearch] = useState("");
     const { t } = useLanguage();
@@ -81,16 +80,15 @@ export default function TrailsCatalogPage() {
             setIsLoading(true);
             try {
                 // Try backend first
-                const [trailsResp, coursesResp, enrollmentsResp] = await Promise.all([
+                const [trailsResp, coursesResp, trailEnrollmentsResp] = await Promise.all([
                     api.get('/trails'),
                     api.get('/courses?published=true'),
-                    api.get('/enrollments/me').catch(() => ({ data: [] })),
+                    api.get('/trails/enrollments/me').catch(() => ({ data: [] })),
                 ]);
 
                 const fetchedTrails: ApiTrail[] = trailsResp.data || [];
                 const fetchedCourses: Course[] = coursesResp.data || [];
-                const enrolledCourseIds: string[] = (enrollmentsResp.data || []).map((e: any) => e.courseId);
-                setMyEnrollments(enrolledCourseIds);
+                const enrolledTrailIds: string[] = (trailEnrollmentsResp.data || []).map((e: any) => e.trailId);
 
                 // compute per-trail progress by aggregating course progress
                 const computeTrail = async (t: ApiTrail): Promise<Trail> => {
@@ -117,7 +115,7 @@ export default function TrailsCatalogPage() {
                         progress,
                         totalCourses: trailCourses.length,
                         completedCourses: completedCount,
-                        isMember: trailCourses.some((c) => enrolledCourseIds.includes(c.id)),
+                        isMember: enrolledTrailIds.includes(t.id),
                     } as Trail;
                 };
                 const mapped = await Promise.all(fetchedTrails.map((t: ApiTrail) => computeTrail(t)));
@@ -309,7 +307,7 @@ export default function TrailsCatalogPage() {
                             {activeFilter === "mine" ? "Você ainda não participa de nenhuma trilha." : t("trails.emptyTitle")}
                         </h3>
                         <p style={{ fontSize: 14, color: colors.textMuted, maxWidth: 360, margin: '0 auto 30px', lineHeight: 1.6 }}>
-                            {activeFilter === "mine" ? "Entre em um curso para começar a fazer parte de trilhas relacionadas." : t("trails.emptyDesc")}
+                            {activeFilter === "mine" ? "Entre em uma trilha para começar sua jornada de aprendizado." : t("trails.emptyDesc")}
                         </p>
                         <button
                             onClick={() => activeFilter === "mine" ? setActiveFilter("all") : router.push('/catalog')}
@@ -367,3 +365,4 @@ export default function TrailsCatalogPage() {
         </div>
     );
 }
+

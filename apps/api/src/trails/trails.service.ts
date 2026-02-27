@@ -11,19 +11,33 @@ export class TrailsService {
         return this.prisma.trail.create({ data: { ...dto, companyId } });
     }
 
-    async findAll(companyId: string) {
-        return this.prisma.trail.findMany({
+    async findAll(companyId: string, userId?: string) {
+        const trails = await this.prisma.trail.findMany({
             where: { companyId },
             include: {
                 courses: {
                     include: { course: true },
                     orderBy: { order: 'asc' },
                 },
+                ...(userId
+                    ? {
+                        enrollments: {
+                            where: { userId },
+                            select: { userId: true, enrolledAt: true },
+                        },
+                    }
+                    : {}),
             },
         });
+
+        if (!userId) return trails;
+        return trails.map((trail: any) => ({
+            ...trail,
+            isEnrolled: (trail.enrollments?.length ?? 0) > 0,
+        }));
     }
 
-    async findOne(id: string) {
+    async findOne(id: string, userId?: string) {
         const trail = await this.prisma.trail.findUnique({
             where: { id },
             include: {
@@ -35,10 +49,22 @@ export class TrailsService {
                     },
                     orderBy: { order: 'asc' },
                 },
+                ...(userId
+                    ? {
+                        enrollments: {
+                            where: { userId },
+                            select: { userId: true, enrolledAt: true },
+                        },
+                    }
+                    : {}),
             },
         });
         if (!trail) throw new NotFoundException('Trail not found');
-        return trail;
+        if (!userId) return trail;
+        return {
+            ...trail,
+            isEnrolled: (trail.enrollments?.length ?? 0) > 0,
+        };
     }
 
     async update(id: string, dto: UpdateTrailDto) {
@@ -61,6 +87,39 @@ export class TrailsService {
     async removeCourse(trailId: string, courseId: string) {
         return this.prisma.trailCourse.delete({
             where: { trailId_courseId: { trailId, courseId } },
+        });
+    }
+
+    async enroll(userId: string, companyId: string, trailId: string) {
+        const trail = await this.prisma.trail.findFirst({
+            where: { id: trailId, companyId },
+            select: { id: true },
+        });
+        if (!trail) throw new NotFoundException('Trail not found');
+
+        const existing = await this.prisma.trailEnrollment.findUnique({
+            where: { userId_trailId: { userId, trailId } },
+        });
+
+        if (existing) {
+            return { ...existing, alreadyEnrolled: true };
+        }
+
+        const enrollment = await this.prisma.trailEnrollment.create({
+            data: { userId, trailId },
+        });
+        return { ...enrollment, alreadyEnrolled: false };
+    }
+
+    async getMyTrailEnrollments(userId: string) {
+        return this.prisma.trailEnrollment.findMany({
+            where: { userId },
+            include: {
+                trail: {
+                    select: { id: true, title: true, description: true, createdAt: true },
+                },
+            },
+            orderBy: { enrolledAt: 'desc' },
         });
     }
 

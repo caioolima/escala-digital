@@ -32,6 +32,7 @@ interface Course {
     students: number;
     lastUpdated: string;
     category: string;
+    lessonsCount?: number;
     modules?: Module[];
 }
 
@@ -56,13 +57,18 @@ export default function CreatorDashboardPage() {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
     const [courses, setCourses] = useState<Course[]>([]);
+    const [companyStudentsCount, setCompanyStudentsCount] = useState<number>(0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchCourses = async () => {
             setLoading(true);
             try {
-                const resp = await api.get("/courses");
+                const [coursesResp, companyStatsResp] = await Promise.all([
+                    api.get("/courses"),
+                    api.get("/auth/company/stats").catch(() => ({ data: { studentsCount: 0 } })),
+                ]);
+                const resp = coursesResp;
                 const data = (resp.data || []).map((c: any) => ({
                     id: c.id,
                     title: c.title,
@@ -72,12 +78,15 @@ export default function CreatorDashboardPage() {
                     students: c.studentsCount ?? 0,
                     lastUpdated: c.updatedAt ? new Date(c.updatedAt).toLocaleDateString("pt-BR") : "—",
                     category: c.category || "Geral",
+                    lessonsCount: c.lessonsCount ?? 0,
                     modules: c.modules,
                 })) as Course[];
                 setCourses(data);
+                setCompanyStudentsCount(companyStatsResp.data?.studentsCount ?? 0);
             } catch (e) {
                 console.error("Failed to fetch creator dashboard courses", e);
                 setCourses([]);
+                setCompanyStudentsCount(0);
             } finally {
                 setLoading(false);
             }
@@ -94,15 +103,15 @@ export default function CreatorDashboardPage() {
         accent: "#9146FF",
     };
 
-    const totalStudents = courses.reduce((acc, c) => acc + (c.students ?? 0), 0);
-    const totalLessons = courses.reduce((acc, c) => acc + (c.modules?.flatMap(m => m.lessons).length ?? 0), 0);
+    const totalStudents = companyStudentsCount;
+    const totalLessons = courses.reduce((acc, c) => acc + (c.lessonsCount ?? c.modules?.flatMap(m => m.lessons).length ?? 0), 0);
     const publishedCount = courses.filter(c => c.status === "published").length;
     const draftCount = courses.length - publishedCount;
 
     const stats = [
         { label: "Total de alunos", value: totalStudents, icon: Users, color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
         { label: "Cursos publicados", value: publishedCount, icon: CheckCircle2, color: "#10b981", bg: "rgba(16,185,129,0.1)" },
-        { label: "Aulas gravadas", value: totalLessons, icon: Video, color: "#3b82f6", bg: "rgba(59,130,246,0.1)" },
+        { label: "Total de aulas", value: totalLessons, icon: Video, color: "#3b82f6", bg: "rgba(59,130,246,0.1)" },
         { label: "Rascunhos", value: draftCount, icon: FileEdit, color: "#9146FF", bg: "rgba(145,70,255,0.1)" },
     ];
 

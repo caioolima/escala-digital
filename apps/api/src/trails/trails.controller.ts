@@ -30,12 +30,22 @@ export class TrailsController {
 
     @Get()
     findAll(@CurrentUser() user: any) {
-        return this.trailsService.findAll(user.companyId);
+        return this.trailsService.findAll(user.companyId, user.id);
+    }
+
+    @Get('enrollments/me')
+    getMyTrailEnrollments(@CurrentUser() user: any) {
+        return this.trailsService.getMyTrailEnrollments(user.id);
+    }
+
+    @Post(':id/enroll')
+    enroll(@CurrentUser() user: any, @Param('id') id: string) {
+        return this.trailsService.enroll(user.id, user.companyId, id);
     }
 
     @Get(':id')
-    findOne(@Param('id') id: string) {
-        return this.trailsService.findOne(id);
+    findOne(@CurrentUser() user: any, @Param('id') id: string) {
+        return this.trailsService.findOne(id, user.id);
     }
 
     @UseGuards(RolesGuard)

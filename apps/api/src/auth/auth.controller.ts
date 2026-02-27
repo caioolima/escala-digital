@@ -50,6 +50,12 @@ export class AuthController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Get('company/stats')
+    getCompanyStats(@CurrentUser() user: any) {
+        return this.authService.getCompanyStats(user.companyId);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Patch('me')
     async updateProfile(@CurrentUser() user: any, @Body() dto: any) {
         return this.authService.updateProfile(user.id, dto);

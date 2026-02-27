@@ -238,6 +238,17 @@ export class AuthService {
         };
     }
 
+    async getCompanyStats(companyId: string) {
+        const studentsCount = await this.prisma.user.count({
+            where: {
+                companyId,
+                role: Role.STUDENT,
+            },
+        });
+
+        return { studentsCount };
+    }
+
     async changePassword(userId: string, currentPassword: string, newPassword: string) {
         if (!currentPassword || !newPassword) throw new BadRequestException('Passwords required');
         const user = await this.prisma.user.findUnique({ where: { id: userId } });

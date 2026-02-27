@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -96,6 +96,7 @@ export default function TrailDetailsPage() {
 
     const [activeTrail, setActiveTrail] = useState<Trail | null>(null);
     const [courses, setCourses] = useState<Course[]>([]);
+    const [courseProgressById, setCourseProgressById] = useState<Record<string, number>>({});
 
     useEffect(() => {
         setMounted(true);
@@ -106,6 +107,8 @@ export default function TrailDetailsPage() {
         const fetchTrailDetails = async () => {
             setIsLoading(true);
             try {
+                await api.post(`/trails/${trailId}/enroll`).catch(() => null);
+
                 const [trailResp, coursesResp] = await Promise.all([
                     api.get(`/trails/${trailId}`),
                     api.get('/courses?published=true'),
@@ -129,6 +132,10 @@ export default function TrailDetailsPage() {
                     };
 
                     const percentages: number[] = await Promise.all(trailCourses.map(c => getProgress(c.id)));
+                    const nextCourseProgressById: Record<string, number> = {};
+                    trailCourses.forEach((course, idx) => {
+                        nextCourseProgressById[course.id] = percentages[idx] ?? 0;
+                    });
                     const completedCount = percentages.filter((p: number) => p === 100).length;
                     const progress = trailCourses.length > 0 ? Math.round((completedCount / trailCourses.length) * 100) : 0;
 
@@ -142,6 +149,7 @@ export default function TrailDetailsPage() {
                     });
 
                     setCourses(fetchedCourses);
+                    setCourseProgressById(nextCourseProgressById);
                 }
             } catch {
                 console.error('Failed to load trail details');
@@ -180,8 +188,7 @@ export default function TrailDetailsPage() {
     const activeTrailCourseIds: string[] = (activeTrail.courses || activeTrail.courseIds || []).map((tc: any) => typeof tc === 'string' ? tc : (tc.course?.id || tc.courseId)).filter(Boolean);
 
     const activeTrailCourses = courses.filter(c => activeTrailCourseIds.includes(c.id)).map(c => {
-        const studentProgress: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
-        const progress = studentProgress[c.id] || 0;
+        const progress = courseProgressById[c.id] ?? 0;
         return {
             ...c,
             status: progress === 100 ? "completed" : (progress > 0 ? "in_progress" : "not_started"),
@@ -189,9 +196,11 @@ export default function TrailDetailsPage() {
         };
     });
 
-    const handleCourseClick = (courseId: string) => {
+    const handleCourseClick = async (courseId: string) => {
         const course = courses.find(c => c.id === courseId);
         if (!course) return;
+
+        await api.post(`/enrollments/${courseId}`).catch(() => null);
 
         const firstLessonId = course.modules?.[0]?.lessons?.[0]?.id;
         if (firstLessonId) {
@@ -531,3 +540,4 @@ export default function TrailDetailsPage() {
         </div >
     );
 }
+
