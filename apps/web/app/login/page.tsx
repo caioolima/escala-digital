@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
@@ -27,20 +27,25 @@ const MODES = {
 };
 
 export default function LoginPage() {
-    const { login } = useAuth();
+    const RESEND_COOLDOWN_SECONDS = 30;
+    const CODE_VALIDITY_MINUTES = 10;
+    const { login, verifyTwoFactor, resendTwoFactor } = useAuth();
     const { theme, setTheme, resolvedTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
     const [mode, setMode] = useState<"student" | "corporate">("student");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [twoFactorCode, setTwoFactorCode] = useState("");
+    const [pending2FA, setPending2FA] = useState<{ userId: string; email: string; role: "CREATOR" | "STUDENT" } | null>(null);
+    const [resendingCode, setResendingCode] = useState(false);
+    const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+    const [cooldownSeconds, setCooldownSeconds] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
     // Hydration fix for next-themes
     useEffect(() => setMounted(true), []);
-
-    if (!mounted) return null;
 
     const isDark = resolvedTheme === "dark";
     const cfg = MODES[mode];
@@ -51,7 +56,20 @@ export default function LoginPage() {
         setError("");
         try {
             const requiredRole = mode === "student" ? "STUDENT" : "CREATOR";
-            await login(email, password, requiredRole);
+            if (pending2FA) {
+                await verifyTwoFactor(pending2FA.userId, twoFactorCode, requiredRole);
+            } else {
+                const result = await login(email, password, requiredRole);
+                if (result.requires2FA) {
+                    setPending2FA({
+                        userId: result.userId,
+                        email: result.email,
+                        role: result.role,
+                    });
+                    setTwoFactorCode("");
+                    setResendAvailableAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+                }
+            }
         } catch (err: any) {
             if (err.message?.startsWith("RESTRICTED_ROLE:")) {
                 const role = err.message.split(":")[1];
@@ -59,12 +77,46 @@ export default function LoginPage() {
                     ? "Esta conta tem acesso corporativo. Por favor, use o login de Gestor."
                     : "Esta conta é de aluno. Por favor, use o login de Aluno.");
             } else {
-                setError("E-mail ou senha inválidos. Verifique suas credenciais.");
+                setError(pending2FA
+                    ? "Código inválido ou expirado. Verifique e tente novamente."
+                    : "E-mail ou senha inválidos. Verifique suas credenciais.");
             }
         } finally {
             setLoading(false);
         }
     };
+
+    const handleResendCode = async () => {
+        if (!pending2FA) return;
+        setResendingCode(true);
+        setError("");
+        try {
+            await resendTwoFactor(pending2FA.userId);
+            setResendAvailableAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+        } catch {
+            setError("Não foi possível reenviar o código agora. Tente novamente em instantes.");
+        } finally {
+            setResendingCode(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!pending2FA || !resendAvailableAt) {
+            setCooldownSeconds(0);
+            return;
+        }
+
+        const update = () => {
+            const remaining = Math.max(0, Math.ceil((resendAvailableAt - Date.now()) / 1000));
+            setCooldownSeconds(remaining);
+        };
+
+        update();
+        const timer = setInterval(update, 250);
+        return () => clearInterval(timer);
+    }, [pending2FA, resendAvailableAt]);
+
+    if (!mounted) return null;
 
     const colors = {
         bg: isDark ? "#060d1f" : "#f8fafc",
@@ -295,81 +347,125 @@ export default function LoginPage() {
                             transition: "all 0.3s ease",
                         }}>
 
-                            {/* Toggle */}
-                            <div style={{ display: "flex", background: isDark ? "rgba(0,0,0,0.4)" : "#f1f5f9", borderRadius: "14px", padding: "5px", marginBottom: "32px", gap: "5px" }}>
-                                {([
-                                    { key: "student" as const, icon: UserCircle, label: "Sou aluno" },
-                                    { key: "corporate" as const, icon: Building2, label: "Gestor" },
-                                ]).map(({ key, icon: Icon, label }) => (
-                                    <button
-                                        key={key}
-                                        type="button"
-                                        onClick={() => { setMode(key); setError(""); setEmail(""); setPassword(""); }}
-                                        className="mode-btn"
-                                        style={{
-                                            flex: 1, height: "42px", borderRadius: "10px", border: "none",
-                                            display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                                            fontSize: "14px", fontWeight: 600, fontFamily: "inherit",
-                                            background: mode === key
-                                                ? (isDark ? "linear-gradient(135deg, rgba(37,99,235,0.6), rgba(99,102,241,0.5))" : "white")
-                                                : "transparent",
-                                            color: mode === key ? (isDark ? "white" : "#2563eb") : colors.textMuted,
-                                            boxShadow: mode === key ? (isDark ? "0 4px 12px rgba(0,0,0,0.2)" : "0 2px 8px rgba(0,0,0,0.1)") : "none",
-                                        }}
-                                    >
-                                        <Icon size={16} />
-                                        {label}
-                                    </button>
-                                ))}
-                            </div>
+                            {!pending2FA && (
+                                <div style={{ display: "flex", background: isDark ? "rgba(0,0,0,0.4)" : "#f1f5f9", borderRadius: "14px", padding: "5px", marginBottom: "32px", gap: "5px" }}>
+                                    {([
+                                        { key: "student" as const, icon: UserCircle, label: "Sou aluno" },
+                                        { key: "corporate" as const, icon: Building2, label: "Gestor" },
+                                    ]).map(({ key, icon: Icon, label }) => (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            onClick={() => { setMode(key); setError(""); setEmail(""); setPassword(""); setPending2FA(null); setTwoFactorCode(""); }}
+                                            className="mode-btn"
+                                            style={{
+                                                flex: 1, height: "42px", borderRadius: "10px", border: "none",
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                                fontSize: "14px", fontWeight: 600, fontFamily: "inherit",
+                                                background: mode === key
+                                                    ? (isDark ? "linear-gradient(135deg, rgba(37,99,235,0.6), rgba(99,102,241,0.5))" : "white")
+                                                    : "transparent",
+                                                color: mode === key ? (isDark ? "white" : "#2563eb") : colors.textMuted,
+                                                boxShadow: mode === key ? (isDark ? "0 4px 12px rgba(0,0,0,0.2)" : "0 2px 8px rgba(0,0,0,0.1)") : "none",
+                                            }}
+                                        >
+                                            <Icon size={16} />
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Titles */}
                             <div style={{ marginBottom: "32px" }}>
-                                <h2 style={{ fontSize: "24px", fontWeight: 800, color: colors.text, margin: "0 0 8px", letterSpacing: "-0.5px" }}>{cfg.title}</h2>
-                                <p style={{ color: colors.textMuted, fontSize: "15px", margin: 0, lineHeight: 1.5 }}>{cfg.subtitle}</p>
+                                <h2 style={{ fontSize: "24px", fontWeight: 800, color: colors.text, margin: "0 0 8px", letterSpacing: "-0.5px" }}>
+                                    {pending2FA ? "Verificação em duas etapas" : cfg.title}
+                                </h2>
+                                <p style={{ color: colors.textMuted, fontSize: "15px", margin: 0, lineHeight: 1.5 }}>
+                                    {pending2FA ? `Digite o código de 6 dígitos enviado para ${pending2FA.email}.` : cfg.subtitle}
+                                </p>
                             </div>
 
                             {/* Form */}
                             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "14px", fontWeight: 600, color: colors.text, opacity: 0.7, marginBottom: "8px" }}>
-                                        {cfg.emailLabel}
-                                    </label>
-                                    <input type="email" placeholder={cfg.placeholder} value={email} onChange={(e) => setEmail(e.target.value)} required style={inputBase} onFocus={onFocus} onBlur={onBlur} />
-                                </div>
+                                {!pending2FA ? (
+                                    <>
+                                        <div>
+                                            <label style={{ display: "block", fontSize: "14px", fontWeight: 600, color: colors.text, opacity: 0.7, marginBottom: "8px" }}>
+                                                {cfg.emailLabel}
+                                            </label>
+                                            <input type="email" placeholder={cfg.placeholder} value={email} onChange={(e) => setEmail(e.target.value)} required style={inputBase} onFocus={onFocus} onBlur={onBlur} />
+                                        </div>
 
-                                <div>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                                        <label style={{ fontSize: "14px", fontWeight: 600, color: colors.text, opacity: 0.7 }}>Senha</label>
-                                        <button type="button" style={{ fontSize: "13px", color: "#3b82f6", background: "none", border: "none", fontWeight: 600, padding: 0, fontFamily: "inherit" }}>Esqueceu?</button>
-                                    </div>
-                                    <div style={{ position: "relative" }}>
-                                        <input type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required style={inputBase} onFocus={onFocus} onBlur={onBlur} />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            style={{
-                                                position: "absolute",
-                                                right: "12px",
-                                                top: "50%",
-                                                transform: "translateY(-50%)",
-                                                background: "none",
-                                                border: "none",
-                                                color: colors.textMuted,
-                                                cursor: "pointer",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                padding: "4px",
-                                                borderRadius: "6px",
-                                                transition: "all 0.2s ease"
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}
-                                            onMouseLeave={(e) => e.currentTarget.style.background = "none"}
-                                        >
-                                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                        </button>
-                                    </div>
-                                </div>
+                                        <div>
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                                <label style={{ fontSize: "14px", fontWeight: 600, color: colors.text, opacity: 0.7 }}>Senha</label>
+                                                <button type="button" style={{ fontSize: "13px", color: "#3b82f6", background: "none", border: "none", fontWeight: 600, padding: 0, fontFamily: "inherit" }}>Esqueceu?</button>
+                                            </div>
+                                            <div style={{ position: "relative" }}>
+                                                <input type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required style={inputBase} onFocus={onFocus} onBlur={onBlur} />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    style={{
+                                                        position: "absolute",
+                                                        right: "12px",
+                                                        top: "50%",
+                                                        transform: "translateY(-50%)",
+                                                        background: "none",
+                                                        border: "none",
+                                                        color: colors.textMuted,
+                                                        cursor: "pointer",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        padding: "4px",
+                                                        borderRadius: "6px",
+                                                        transition: "all 0.2s ease"
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}
+                                                    onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+                                                >
+                                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div style={{ display: "grid", gap: "10px" }}>
+                                            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: isDark ? "rgba(59,130,246,0.16)" : "#eff6ff", color: isDark ? "#bfdbfe" : "#1d4ed8", border: `1px solid ${isDark ? "rgba(59,130,246,0.28)" : "#bfdbfe"}`, borderRadius: "999px", padding: "6px 12px", fontSize: "12px", fontWeight: 700, width: "fit-content" }}>
+                                                Código por e-mail
+                                            </div>
+                                            <label style={{ display: "block", fontSize: "14px", fontWeight: 600, color: colors.text, opacity: 0.7, marginBottom: "8px" }}>
+                                                Código de verificação
+                                            </label>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                maxLength={6}
+                                                pattern="[0-9]{6}"
+                                                placeholder="000000"
+                                                value={twoFactorCode}
+                                                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                                required
+                                                style={{ ...inputBase, letterSpacing: "6px", textAlign: "center", fontWeight: 700 }}
+                                                onFocus={onFocus}
+                                                onBlur={onBlur}
+                                            />
+                                            <p style={{ margin: "10px 0 0 0", color: colors.textMuted, fontSize: "12px", fontWeight: 600 }}>
+                                                Código válido por {CODE_VALIDITY_MINUTES} minutos.
+                                            </p>
+                                        </div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                                            <button type="button" onClick={handleResendCode} disabled={resendingCode || cooldownSeconds > 0} style={{ fontSize: "13px", color: "#3b82f6", background: isDark ? "rgba(59,130,246,0.12)" : "#eff6ff", border: `1px solid ${isDark ? "rgba(59,130,246,0.35)" : "#bfdbfe"}`, borderRadius: "10px", fontWeight: 700, padding: "10px 12px", fontFamily: "inherit", opacity: (resendingCode || cooldownSeconds > 0) ? 0.6 : 1, cursor: (resendingCode || cooldownSeconds > 0) ? "default" : "pointer" }}>
+                                                {resendingCode ? "Reenviando..." : cooldownSeconds > 0 ? `Aguarde ${cooldownSeconds}s` : "Reenviar código"}
+                                            </button>
+                                            <button type="button" onClick={() => { setPending2FA(null); setTwoFactorCode(""); setError(""); setResendAvailableAt(null); }} style={{ fontSize: "13px", color: colors.textMuted, background: "transparent", border: `1px solid ${colors.inputBorder}`, borderRadius: "10px", fontWeight: 700, padding: "10px 12px", fontFamily: "inherit" }}>
+                                                Voltar
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
 
                                 {error && (
                                     <div style={{ background: isDark ? "rgba(239,68,68,0.15)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`, borderRadius: "12px", padding: "12px 16px", fontSize: "14px", color: isDark ? "#fca5a5" : "#dc2626" }}>
@@ -401,13 +497,15 @@ export default function LoginPage() {
                                     }}
                                 >
                                     {loading ? <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> : null}
-                                    {loading ? "Entrando..." : "Acessar Plataforma"}
+                                    {loading ? "Entrando..." : (pending2FA ? "Validar código" : "Acessar Plataforma")}
                                     {!loading && <ArrowRight size={18} />}
                                 </button>
                             </form>
 
                             <div style={{ marginTop: "32px", paddingTop: "24px", borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9"}`, textAlign: "center" }}>
-                                <p style={{ fontSize: "14px", color: colors.textMuted, margin: 0 }}>{cfg.footer(isDark)}</p>
+                                <p style={{ fontSize: "14px", color: colors.textMuted, margin: 0 }}>
+                                    {pending2FA ? <>Sem acesso? <span style={{ color: isDark ? "#60a5fa" : "#2563eb", fontWeight: 600 }}>Fale com sua empresa</span></> : cfg.footer(isDark)}
+                                </p>
                             </div>
                         </div>
                     </div>

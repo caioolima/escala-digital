@@ -12,11 +12,22 @@ interface User {
     role: "CREATOR" | "STUDENT";
 }
 
+type LoginRole = "CREATOR" | "STUDENT";
+type LoginResult =
+    | { requires2FA: false }
+    | { requires2FA: true; userId: string; email: string; role: LoginRole };
+
 interface AuthContextType {
     user: User | null;
     loading: boolean;
-    login: (email: string, password: string, role: "CREATOR" | "STUDENT") => Promise<void>;
+    login: (email: string, password: string, role: LoginRole) => Promise<LoginResult>;
+    verifyTwoFactor: (userId: string, code: string, requiredRole: LoginRole) => Promise<void>;
+    resendTwoFactor: (userId: string) => Promise<void>;
     logout: () => void;
+    updateProfile?: (data: { name?: string; email?: string; avatarUrl?: string }) => Promise<void>;
+    changePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
+    getSettings?: () => Promise<{ preferences?: any; notifications?: any } | null>;
+    updateSettings?: (body: { preferences?: any; notifications?: any }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -43,28 +54,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         checkAuth();
     }, []);
 
-    const login = async (email: string, password: string, requiredRole: "CREATOR" | "STUDENT") => {
+    const completeSession = async (accessToken: string, requiredRole: LoginRole) => {
+        localStorage.setItem("access_token", accessToken);
+        const userResponse = await api.get("/auth/me");
+        const userData = userResponse.data;
+        setUser(userData);
+
+        if (userData.role !== requiredRole) {
+            localStorage.removeItem("access_token");
+            throw new Error(`RESTRICTED_ROLE:${userData.role}`);
+        }
+
+        if (userData.role === "CREATOR") {
+            router.push("/creator/dashboard");
+        } else {
+            router.push("/catalog");
+        }
+    };
+
+    const login = async (email: string, password: string, requiredRole: LoginRole): Promise<LoginResult> => {
         try {
             const response = await api.post("/auth/login", { email, password });
-            const { access_token, role: userRole } = response.data;
+            const data = response.data;
 
-            // Check if the user's role matches the required role for this login form
-            if (userRole !== requiredRole) {
-                throw new Error(`RESTRICTED_ROLE:${userRole}`);
+            if (data?.requires2FA) {
+                if (data.role !== requiredRole) {
+                    throw new Error(`RESTRICTED_ROLE:${data.role}`);
+                }
+                return {
+                    requires2FA: true,
+                    userId: data.userId,
+                    email: data.email,
+                    role: data.role,
+                };
             }
 
-            localStorage.setItem("access_token", access_token);
-
-            // Fetch complete user profile after login
-            const userResponse = await api.get("/auth/me");
-            const userData = userResponse.data;
-            setUser(userData);
-
-            if (userData.role === "CREATOR") {
-                router.push("/creator/dashboard");
-            } else {
-                router.push("/catalog");
-            }
+            await completeSession(data.access_token, requiredRole);
+            return { requires2FA: false };
         } catch (e: any) {
             if (e.message?.startsWith("RESTRICTED_ROLE:")) {
                 throw e;
@@ -73,14 +99,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const verifyTwoFactor = async (userId: string, code: string, requiredRole: LoginRole) => {
+        const response = await api.post("/auth/2fa/verify", { userId, code });
+        const { access_token } = response.data;
+        await completeSession(access_token, requiredRole);
+    };
+
+    const resendTwoFactor = async (userId: string) => {
+        await api.post("/auth/2fa/resend", { userId });
+    };
+
     const logout = () => {
         localStorage.removeItem("access_token");
         setUser(null);
         router.push("/login");
     };
 
+    const updateProfile = async (data: { name?: string; email?: string; avatarUrl?: string }) => {
+        const resp = await api.patch('/auth/me', data);
+        setUser(resp.data);
+    };
+
+    const changePassword = async (currentPassword: string, newPassword: string) => {
+        await api.post('/auth/me/password', { currentPassword, newPassword });
+    };
+
+    const getSettings = async () => {
+        const resp = await api.get('/auth/me/settings');
+        return resp.data;
+    };
+
+    const updateSettings = async (body: { preferences?: any; notifications?: any }) => {
+        const resp = await api.patch('/auth/me/settings', body);
+        return resp.data;
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout }}>
+        <AuthContext.Provider value={{ user, loading, login, verifyTwoFactor, resendTwoFactor, logout, updateProfile, changePassword, getSettings, updateSettings }}>
             {children}
         </AuthContext.Provider>
     );
