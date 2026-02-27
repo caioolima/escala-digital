@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -22,12 +23,6 @@ import {
     Play,
 } from "lucide-react";
 
-const studentLinks = [
-    { href: "/catalog", label: "Cursos", icon: LayoutGrid },
-    { href: "/trails", label: "Trilhas", icon: Map },
-    { href: "/profile", label: "Meu Perfil", icon: UserIcon },
-];
-
 const creatorLinks = [
     { href: "/creator/dashboard", label: "Dashboard", icon: Home },
     { href: "/creator/courses", label: "Cursos", icon: BookOpen },
@@ -45,6 +40,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     const { user, logout } = useAuth();
     const pathname = usePathname();
     const { setTheme, resolvedTheme } = useTheme();
+    const { t } = useLanguage();
     const isDark = mounted && resolvedTheme === "dark";
 
     useEffect(() => {
@@ -52,6 +48,11 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     }, []);
 
     const isCreator = user?.role === "CREATOR";
+    const studentLinks = [
+        { href: "/catalog", label: t("nav.courses"), icon: LayoutGrid },
+        { href: "/trails", label: t("nav.trails"), icon: Map },
+        { href: "/profile", label: t("nav.profile"), icon: UserIcon },
+    ];
     const links = isCreator ? creatorLinks : studentLinks;
     const brandColor = isCreator ? "#9146FF" : "#3b82f6";
     const brandBg = isCreator ? "rgba(145, 70, 255, 0.12)" : "rgba(59, 130, 246, 0.15)";
@@ -127,7 +128,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                         padding: "0 14px",
                         marginBottom: "12px"
                     }}>
-                        Principal
+                        {t("nav.main")}
                     </div>
                 )}
 
@@ -244,7 +245,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     onMouseLeave={(e) => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"}
                 >
                     {isDark ? <Sun size={18} /> : <Moon size={18} />}
-                    {!isCollapsed && <span>{isDark ? "Modo Claro" : "Modo Escuro"}</span>}
+                    {!isCollapsed && <span>{isDark ? t("nav.lightMode") : t("nav.darkMode")}</span>}
                 </button>
 
                 {/* Profile Box - "The requested style" */}
@@ -311,7 +312,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                 >
                     <LogOut size={18} />
-                    {!isCollapsed && <span>Sair da Conta</span>}
+                    {!isCollapsed && <span>{t("nav.logout")}</span>}
                 </button>
             </div>
         </motion.aside>

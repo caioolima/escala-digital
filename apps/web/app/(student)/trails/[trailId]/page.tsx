@@ -12,6 +12,7 @@ import {
     ArrowLeft
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { api } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Course {
@@ -38,7 +39,8 @@ interface Trail {
     title: string;
     description: string;
     accent: string;
-    courseIds: string[];
+    courseIds?: string[];
+    courses?: any[];
     createdAt: string;
     cover?: string;
     progress?: number;
@@ -101,32 +103,57 @@ export default function TrailDetailsPage() {
         checkMobile();
         window.addEventListener("resize", checkMobile);
 
-        const storedTrails: Trail[] = JSON.parse(localStorage.getItem("creator_published_trails") || "[]");
-        const storedCourses: Course[] = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-        const studentProgress: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
+        const fetchTrailDetails = async () => {
+            setIsLoading(true);
+            try {
+                const [trailResp, coursesResp] = await Promise.all([
+                    api.get(`/trails/${trailId}`),
+                    api.get('/courses?published=true'),
+                ]);
 
-        const foundTrail = storedTrails.find(t => t.id === trailId);
-        if (foundTrail) {
-            const trailCourses = storedCourses.filter(c => foundTrail.courseIds.includes(c.id));
-            const completedCount = trailCourses.filter(c => studentProgress[c.id] === 100).length;
-            const progress = trailCourses.length > 0 ? Math.round((completedCount / trailCourses.length) * 100) : 0;
+                const foundTrail: Trail = trailResp.data;
+                const fetchedCourses: Course[] = coursesResp.data || [];
 
-            setActiveTrail({
-                ...foundTrail,
-                cover: trailCourses[0]?.thumbnail || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80",
-                progress,
-                totalCourses: trailCourses.length,
-                completedCourses: completedCount,
-                updatedAt: foundTrail.createdAt ? `Criada em ${foundTrail.createdAt}` : "Atualizado recentemente"
-            });
-        }
-        setCourses(storedCourses);
+                if (foundTrail) {
+                    const ids: string[] = (foundTrail.courses || []).map((tc: any) => tc.course?.id || tc.courseId).filter(Boolean);
+                    const trailCourses = fetchedCourses.filter(c => ids.includes(c.id));
 
-        const timer = setTimeout(() => setIsLoading(false), 800);
+                    // compute progress per course
+                    const getProgress = async (courseId: string) => {
+                        try {
+                            const r = await api.get(`/courses/${courseId}/progress`);
+                            return r.data?.percentage ?? 0;
+                        } catch {
+                            return 0;
+                        }
+                    };
+
+                    const percentages: number[] = await Promise.all(trailCourses.map(c => getProgress(c.id)));
+                    const completedCount = percentages.filter((p: number) => p === 100).length;
+                    const progress = trailCourses.length > 0 ? Math.round((completedCount / trailCourses.length) * 100) : 0;
+
+                    setActiveTrail({
+                        ...foundTrail,
+                        cover: trailCourses[0]?.thumbnail || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80",
+                        progress,
+                        totalCourses: trailCourses.length,
+                        completedCourses: completedCount,
+                        updatedAt: foundTrail.createdAt ? `Criada em ${foundTrail.createdAt}` : "Atualizado recentemente"
+                    });
+
+                    setCourses(fetchedCourses);
+                }
+            } catch {
+                console.error('Failed to load trail details');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        if (trailId) fetchTrailDetails();
 
         return () => {
             window.removeEventListener("resize", checkMobile);
-            clearTimeout(timer);
         };
     }, [trailId]);
 
@@ -150,7 +177,9 @@ export default function TrailDetailsPage() {
     if (isLoading) return <div style={{ padding: isMobile ? "20px" : "40px 60px" }}><TrailSkeleton isMobile={isMobile} /></div>;
     if (!activeTrail) return null;
 
-    const activeTrailCourses = courses.filter(c => activeTrail.courseIds.includes(c.id)).map(c => {
+    const activeTrailCourseIds: string[] = (activeTrail.courses || activeTrail.courseIds || []).map((tc: any) => typeof tc === 'string' ? tc : (tc.course?.id || tc.courseId)).filter(Boolean);
+
+    const activeTrailCourses = courses.filter(c => activeTrailCourseIds.includes(c.id)).map(c => {
         const studentProgress: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
         const progress = studentProgress[c.id] || 0;
         return {

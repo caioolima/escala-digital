@@ -11,6 +11,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { MailService } from '../mail/mail.service';
+import { CreateStudentAccessDto } from './dto/create-student-access.dto';
+import { Role } from '../common/enums';
 
 type PreferencesObj = Record<string, any>;
 type TwoFactorChallenge = {
@@ -83,6 +85,61 @@ export class AuthService {
         }
 
         return this.signToken(user.id, user.email, user.role, user.name);
+    }
+
+    async createStudentAccess(creatorId: string, dto: CreateStudentAccessDto) {
+        const creator = await this.prisma.user.findUnique({
+            where: { id: creatorId },
+            select: {
+                id: true,
+                role: true,
+                companyId: true,
+                company: { select: { name: true } },
+            },
+        });
+        if (!creator || creator.role !== Role.CREATOR) {
+            throw new ForbiddenException('Only creators can create student access');
+        }
+
+        const normalizedEmail = dto.email.trim().toLowerCase();
+        const existingUser = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+        if (existingUser) {
+            throw new ConflictException('Email already in use');
+        }
+
+        const temporaryPassword = this.generateTemporaryPassword();
+        const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+        const fallbackName = this.deriveNameFromEmail(normalizedEmail);
+
+        const student = await this.prisma.user.create({
+            data: {
+                email: normalizedEmail,
+                name: dto.name?.trim() || fallbackName,
+                password: hashedPassword,
+                role: Role.STUDENT,
+                companyId: creator.companyId,
+            },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                companyId: true,
+                createdAt: true,
+            },
+        });
+
+        await this.mailService.sendStudentWelcomeAccessEmail({
+            to: student.email,
+            studentName: student.name,
+            companyName: creator.company?.name || 'sua empresa',
+            temporaryPassword,
+        });
+
+        return {
+            ok: true,
+            student,
+        };
     }
 
     async verifyTwoFactorCode(userId: string, code: string) {
@@ -228,6 +285,28 @@ export class AuthService {
 
     private generateTwoFactorCode(): string {
         return Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
+    private generateTemporaryPassword() {
+        const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+        const symbols = '!@#$%';
+        let base = '';
+        for (let i = 0; i < 10; i++) {
+            base += alphabet[Math.floor(Math.random() * alphabet.length)];
+        }
+        const suffix = symbols[Math.floor(Math.random() * symbols.length)];
+        return `${base}${suffix}`;
+    }
+
+    private deriveNameFromEmail(email: string) {
+        const local = email.split('@')[0] || 'Aluno';
+        const clean = local.replace(/[._-]+/g, ' ').trim();
+        if (!clean) return 'Aluno';
+        return clean
+            .split(' ')
+            .filter(Boolean)
+            .map((part) => part[0].toUpperCase() + part.slice(1))
+            .join(' ');
     }
 
     private async createAndStoreTwoFactorChallenge(userId: string, preferencesInput: unknown) {

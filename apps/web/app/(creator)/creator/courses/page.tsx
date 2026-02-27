@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast, ToastContainer } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
 
 interface Lesson { id: string; videoUrl: string; }
 interface Module { id: string; lessons: Lesson[]; }
@@ -121,19 +122,43 @@ export default function CreatorCoursesPage() {
     const { toasts, toast, remove } = useToast();
 
     useEffect(() => {
-        const stored = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-        setAllCourses(stored);
-        setTimeout(() => setIsLoading(false), 600);
+        const fetchCourses = async () => {
+            setIsLoading(true);
+            try {
+                const resp = await api.get("/courses");
+                const mapped = (resp.data || []).map((c: any) => ({
+                    id: c.id,
+                    title: c.title,
+                    status: c.published ? "published" : "draft",
+                    students: c.studentsCount ?? 0,
+                    lastUpdated: c.updatedAt ? new Date(c.updatedAt).toLocaleDateString("pt-BR") : "-",
+                    category: c.category || "Geral",
+                    thumbnail: c.thumbnail || "",
+                    modules: c.modules,
+                })) as Course[];
+                setAllCourses(mapped);
+            } catch (e) {
+                console.error("Failed to fetch creator courses", e);
+                setAllCourses([]);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchCourses();
     }, []);
 
-    const handleDelete = (courseId: string) => {
+    const handleDelete = async (courseId: string) => {
         const target = allCourses.find(c => c.id === courseId);
-        const updated = allCourses.filter(c => c.id !== courseId);
-        setAllCourses(updated);
-        localStorage.setItem("creator_published_courses", JSON.stringify(updated));
-        localStorage.removeItem(`course_${courseId}`);
-        setConfirmDeleteId(null);
-        toast(`"${target?.title}" excluído`, "error", "O curso foi removido permanentemente.");
+        try {
+            await api.delete(`/courses/${courseId}`);
+            const updated = allCourses.filter(c => c.id !== courseId);
+            setAllCourses(updated);
+            setConfirmDeleteId(null);
+            toast(`"${target?.title}" excluído`, "error", "O curso foi removido permanentemente.");
+        } catch (e) {
+            console.error("Failed to delete course", e);
+            toast("Erro ao excluir curso", "error", "Tente novamente em instantes.");
+        }
     };
 
     const colors = {
@@ -383,3 +408,7 @@ export default function CreatorCoursesPage() {
         </div>
     );
 }
+
+
+
+

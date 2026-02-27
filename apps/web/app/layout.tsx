@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ToastProvider } from "@/contexts/toast-context";
+import { LanguageProvider } from "@/contexts/language-context";
 
 import { ThemeProvider } from "@/components/theme-provider";
 
@@ -28,9 +29,11 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
+            <LanguageProvider>
+              <ToastProvider>
+                {children}
+              </ToastProvider>
+            </LanguageProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

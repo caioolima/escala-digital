@@ -70,6 +70,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 const ToastItem: React.FC<{ toast: Toast, onClose: () => void }> = ({ toast, onClose }) => {
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme === "dark";
     const icons = {
         success: <CheckCircle2 size={18} color="#10b981" />,
         error: <AlertCircle size={18} color="#ef4444" />,
@@ -83,6 +85,14 @@ const ToastItem: React.FC<{ toast: Toast, onClose: () => void }> = ({ toast, onC
         info: "rgba(59, 130, 246, 0.15)",
         premium: "rgba(124, 58, 237, 0.15)"
     };
+    const background = isDark ? "rgba(15, 23, 42, 0.8)" : "rgba(255, 255, 255, 0.92)";
+    const border = isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "1px solid rgba(15, 23, 42, 0.12)";
+    const textColor = isDark ? "white" : "#0f172a";
+    const closeColor = isDark ? "rgba(255,255,255,0.4)" : "rgba(15,23,42,0.45)";
+    const iconBg = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
+    const shadow = isDark
+        ? `0 20px 40px rgba(0,0,0,0.3), 0 0 20px ${glows[toast.type]}`
+        : `0 18px 35px rgba(2, 6, 23, 0.12), 0 0 20px ${glows[toast.type]}`;
 
     return (
         <motion.div
@@ -90,9 +100,9 @@ const ToastItem: React.FC<{ toast: Toast, onClose: () => void }> = ({ toast, onC
             animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
             exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
             style={{
-                background: "rgba(15, 23, 42, 0.8)",
+                background,
                 backdropFilter: "blur(20px)",
-                border: `1px solid rgba(255, 255, 255, 0.1)`,
+                border,
                 borderRadius: "20px",
                 padding: "16px 24px",
                 display: "flex",
@@ -100,7 +110,7 @@ const ToastItem: React.FC<{ toast: Toast, onClose: () => void }> = ({ toast, onC
                 gap: "16px",
                 minWidth: "300px",
                 maxWidth: "450px",
-                boxShadow: `0 20px 40px rgba(0,0,0,0.3), 0 0 20px ${glows[toast.type]}`,
+                boxShadow: shadow,
                 pointerEvents: "auto",
                 position: "relative",
                 overflow: "hidden"
@@ -125,7 +135,7 @@ const ToastItem: React.FC<{ toast: Toast, onClose: () => void }> = ({ toast, onC
                     width: "36px",
                     height: "36px",
                     borderRadius: "12px",
-                    background: "rgba(255,255,255,0.05)",
+                    background: iconBg,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -137,7 +147,7 @@ const ToastItem: React.FC<{ toast: Toast, onClose: () => void }> = ({ toast, onC
                 <p style={{
                     fontSize: "14px",
                     fontWeight: 700,
-                    color: "white",
+                    color: textColor,
                     margin: 0,
                     flexGrow: 1,
                     letterSpacing: "-0.3px"
@@ -150,7 +160,7 @@ const ToastItem: React.FC<{ toast: Toast, onClose: () => void }> = ({ toast, onC
                     style={{
                         background: "none",
                         border: "none",
-                        color: "rgba(255,255,255,0.3)",
+                        color: closeColor,
                         cursor: "pointer",
                         padding: "4px",
                         display: "flex",
@@ -159,7 +169,7 @@ const ToastItem: React.FC<{ toast: Toast, onClose: () => void }> = ({ toast, onC
                         borderRadius: "8px",
                         transition: "all 0.2s ease"
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "white")}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = textColor)}
                 >
                     <X size={16} />
                 </button>

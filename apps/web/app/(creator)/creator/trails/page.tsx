@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useToast, ToastContainer } from "@/hooks/use-toast";
@@ -24,8 +24,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
 
-/* ─── Types ─────────────────────────────────────────────── */
+/* Types */
 interface Course {
     id: string;
     title: string;
@@ -53,7 +54,7 @@ interface Trail {
     createdAt: string;
 }
 
-/* ─── Helpers ────────────────────────────────────────────── */
+/* Helpers */
 function getYouTubeThumbnail(course: Course): string {
     if (course.thumbnail && (course.thumbnail.startsWith("http") || course.thumbnail.startsWith("/"))) {
         return course.thumbnail;
@@ -73,7 +74,7 @@ function getYouTubeThumbnail(course: Course): string {
 
 const ACCENT_OPTIONS = ["#9146FF", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899"];
 
-/* ─── Course picker card ─────────────────────────────────── */
+/* Course picker card */
 function CoursePickerCard({ course, selected, onToggle, isDark, colors }: {
     course: Course; selected: boolean; onToggle: () => void;
     isDark: boolean; colors: Record<string, string>;
@@ -107,7 +108,7 @@ function CoursePickerCard({ course, selected, onToggle, isDark, colors }: {
     );
 }
 
-/* ─── Row dropdown ───────────────────────────────────────── */
+/* Row dropdown */
 function TrailMenu({ onView, onEdit, onDelete, isDark, colors }: {
     onView: () => void; onEdit: () => void; onDelete: () => void;
     isDark: boolean; colors: Record<string, string>;
@@ -148,7 +149,7 @@ function TrailMenu({ onView, onEdit, onDelete, isDark, colors }: {
     );
 }
 
-/* ─── Main page ──────────────────────────────────────────── */
+/* Main page */
 export default function CreatorTrailsPage() {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
@@ -173,17 +174,46 @@ export default function CreatorTrailsPage() {
     const [newAccent, setNewAccent] = useState(ACCENT_OPTIONS[0]);
     const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
 
-    useEffect(() => {
-        const storedTrails: Trail[] = JSON.parse(localStorage.getItem("creator_published_trails") || "[]");
-        const storedCourses: Course[] = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-        setTrails(storedTrails);
-        setAvailableCourses(storedCourses);
+    const loadData = async () => {
+        try {
+            const [trailsResp, coursesResp] = await Promise.all([
+                api.get("/trails"),
+                api.get("/courses"),
+            ]);
+            const mappedTrails: Trail[] = (trailsResp.data || []).map((t: any) => ({
+                id: t.id,
+                title: t.title,
+                description: t.description || "",
+                accent: "#9146FF",
+                courseIds: (t.courses || []).map((tc: any) => tc.courseId || tc.course?.id).filter(Boolean),
+                createdAt: t.createdAt ? new Date(t.createdAt).toLocaleDateString("pt-BR") : "",
+            }));
+            const mappedCourses: Course[] = (coursesResp.data || []).map((c: any) => ({
+                id: c.id,
+                title: c.title,
+                category: c.category || "Geral",
+                thumbnail: c.thumbnail || "",
+                description: c.description,
+                status: c.published ? "published" : "draft",
+                modules: c.modules,
+            }));
+            setTrails(mappedTrails);
+            setAvailableCourses(mappedCourses);
+        } catch (e) {
+            console.error("Failed to fetch creator trails/courses", e);
+            setTrails([]);
+            setAvailableCourses([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
+    useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 1024);
         checkMobile();
         window.addEventListener("resize", checkMobile);
-
-        setTimeout(() => setIsLoading(false), 500);
+        setIsLoading(true);
+        void loadData();
         return () => window.removeEventListener("resize", checkMobile);
     }, []);
 
@@ -201,42 +231,64 @@ export default function CreatorTrailsPage() {
         setShowPanel(true);
     };
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!newTitle.trim() || selectedCourseIds.length === 0) return;
-        const trail: Trail = {
-            id: Date.now().toString(),
-            title: newTitle.trim(),
-            description: newDesc.trim(),
-            accent: newAccent as string,
-            courseIds: selectedCourseIds,
-            createdAt: new Date().toLocaleDateString("pt-BR"),
-        };
-        const updated = [trail, ...trails];
-        setTrails(updated);
-        localStorage.setItem("creator_published_trails", JSON.stringify(updated));
-        setShowPanel(false);
-        toast("Trilha criada com sucesso!", "success", `"${trail.title}" foi adicionada às suas trilhas.`);
+        try {
+            const createResp = await api.post("/trails", {
+                title: newTitle.trim(),
+                description: newDesc.trim(),
+                thumbnail: "",
+            });
+            const trailId = createResp.data?.id as string;
+            await Promise.all(selectedCourseIds.map((courseId, idx) =>
+                api.post(`/trails/${trailId}/courses`, { courseId, order: idx + 1 }),
+            ));
+            await loadData();
+            setShowPanel(false);
+            toast("Trilha criada com sucesso!", "success", `"${newTitle.trim()}" foi adicionada às suas trilhas.`);
+        } catch (e) {
+            console.error("Failed to create trail", e);
+            toast("Erro ao criar trilha", "error", "Tente novamente em instantes.");
+        }
     };
 
-    const handleDelete = (trailId: string) => {
+    const handleDelete = async (trailId: string) => {
         const target = trails.find(t => t.id === trailId);
-        const updated = trails.filter(t => t.id !== trailId);
-        setTrails(updated);
-        localStorage.setItem("creator_published_trails", JSON.stringify(updated));
-        setConfirmDeleteId(null);
-        toast(`"${target?.title}" excluída`, "error", "A trilha foi removida permanentemente.");
+        try {
+            await api.delete(`/trails/${trailId}`);
+            const updated = trails.filter(t => t.id !== trailId);
+            setTrails(updated);
+            setConfirmDeleteId(null);
+            toast(`"${target?.title}" excluída`, "error", "A trilha foi removida permanentemente.");
+        } catch (e) {
+            console.error("Failed to delete trail", e);
+            toast("Erro ao excluir trilha", "error", "Tente novamente em instantes.");
+        }
     };
 
-    const handleEditSave = () => {
+    const handleEditSave = async () => {
         if (!editTrail || !newTitle.trim() || selectedCourseIds.length === 0) return;
-        const updated = trails.map(t => t.id === editTrail.id
-            ? { ...t, title: newTitle.trim(), description: newDesc.trim(), accent: newAccent as string, courseIds: selectedCourseIds }
-            : t
-        );
-        setTrails(updated);
-        localStorage.setItem("creator_published_trails", JSON.stringify(updated));
-        setEditTrail(null);
-        toast("Trilha atualizada!", "success", `"${newTitle.trim()}" foi salva com sucesso.`);
+        try {
+            await api.patch(`/trails/${editTrail.id}`, {
+                title: newTitle.trim(),
+                description: newDesc.trim(),
+                thumbnail: "",
+            });
+            const oldIds = editTrail.courseIds || [];
+            const nextIds = selectedCourseIds;
+            const toAdd = nextIds.filter((id) => !oldIds.includes(id));
+            const toRemove = oldIds.filter((id) => !nextIds.includes(id));
+            await Promise.all([
+                ...toAdd.map((courseId, idx) => api.post(`/trails/${editTrail.id}/courses`, { courseId, order: oldIds.length + idx + 1 })),
+                ...toRemove.map((courseId) => api.delete(`/trails/${editTrail.id}/courses/${courseId}`)),
+            ]);
+            await loadData();
+            setEditTrail(null);
+            toast("Trilha atualizada!", "success", `"${newTitle.trim()}" foi salva com sucesso.`);
+        } catch (e) {
+            console.error("Failed to update trail", e);
+            toast("Erro ao salvar trilha", "error", "Tente novamente em instantes.");
+        }
     };
 
     const toggleCourse = (id: string) => {
@@ -529,7 +581,7 @@ export default function CreatorTrailsPage() {
                 )}
             </div>
 
-            {/* ── View Trail Panel (Immersive Preview) ── */}
+            {/* View Trail Panel (Immersive Preview) */}
             {viewTrail && (() => {
                 const tc = availableCourses.filter(c => viewTrail.courseIds.includes(c.id));
                 const firstCourse = tc[0];
@@ -657,7 +709,7 @@ export default function CreatorTrailsPage() {
                 );
             })()}
 
-            {/* ── Course Detail Modal ── */}
+            {/* Course Detail Modal */}
             {viewCourse && (
                 <div
                     style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", backdropFilter: "blur(12px)" }}
@@ -734,7 +786,7 @@ export default function CreatorTrailsPage() {
                 </div>
             )}
 
-            {/* ── Edit Trail Panel ── */}
+            {/* Edit Trail Panel */}
             {editTrail && (
                 <>
                     <div style={{ position: "fixed", inset: 0, zIndex: 998, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(12px)" }} onClick={() => setEditTrail(null)} />
@@ -803,7 +855,7 @@ export default function CreatorTrailsPage() {
                 </>
             )}
 
-            {/* ── New Trail Side Panel ── */}
+            {/* New Trail Side Panel */}
             {showPanel && (
                 <>
                     <div style={{ position: "fixed", inset: 0, zIndex: 998, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(12px)" }} onClick={() => setShowPanel(false)} />
@@ -915,3 +967,5 @@ export default function CreatorTrailsPage() {
         </div>
     );
 }
+
+

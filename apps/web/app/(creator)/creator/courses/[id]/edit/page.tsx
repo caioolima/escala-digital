@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -17,6 +17,7 @@ import {
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { api } from "@/lib/api";
 
 interface Attachment { id: string; title: string; url: string; }
 interface Lesson { id: string; title: string; videoUrl: string; attachments: Attachment[]; }
@@ -64,18 +65,32 @@ export default function EditCoursePage() {
 
     useEffect(() => {
         setMounted(true);
-        const raw = localStorage.getItem(`course_${courseId}`);
-        if (raw) {
-            const data = JSON.parse(raw);
-            setOriginalStudents(data.students ?? 0);
-            setCourseData({
-                title: data.title || "",
-                description: data.description || "",
-                level: data.level || "Iniciante",
-                modules: data.modules || [],
-                coverUrl: data.thumbnail || "",
-            });
-        }
+        const fetchCourse = async () => {
+            try {
+                const [courseResp, lessonsResp] = await Promise.all([
+                    api.get(`/courses/${courseId}`),
+                    api.get(`/courses/${courseId}/lessons`).catch(() => ({ data: [] })),
+                ]);
+                const c = courseResp.data || {};
+                const lessons = (lessonsResp.data || []).map((l: any) => ({
+                    id: l.id,
+                    title: l.title || "Aula",
+                    videoUrl: l.videoUrl || "",
+                    attachments: [],
+                }));
+                setOriginalStudents(c.studentsCount ?? c._count?.enrollments ?? 0);
+                setCourseData({
+                    title: c.title || "",
+                    description: c.description || "",
+                    level: c.level || "Iniciante",
+                    modules: [{ id: "default", title: "Conteúdo", lessons }],
+                    coverUrl: c.thumbnail || "",
+                });
+            } catch (e) {
+                console.error("Failed to fetch course for edit", e);
+            }
+        };
+        fetchCourse();
     }, [courseId]);
 
     if (!mounted) return null;
@@ -90,34 +105,47 @@ export default function EditCoursePage() {
     };
 
     const handleSave = () => {
-        // Derive YouTube thumbnail from first video
-        const firstVideoUrl = courseData.modules.flatMap(m => m.lessons).find(l => l.videoUrl.trim())?.videoUrl || "";
-        const thumbnail = (firstVideoUrl && getYouTubeThumbnail(firstVideoUrl))
-            || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop";
+        const save = async () => {
+            try {
+                const firstVideoUrl = courseData.modules.flatMap(m => m.lessons).find(l => l.videoUrl.trim())?.videoUrl || "";
+                const thumbnail = (firstVideoUrl && getYouTubeThumbnail(firstVideoUrl))
+                    || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop";
 
-        const updatedCourse = {
-            id: courseId,
-            title: courseData.title,
-            description: courseData.description,
-            level: courseData.level,
-            status: "published",
-            students: originalStudents,
-            lastUpdated: "Agora mesmo",
-            category: "Geral",
-            thumbnail: courseData.coverUrl || thumbnail,
-            modules: courseData.modules,
+                await api.patch(`/courses/${courseId}`, {
+                    title: courseData.title,
+                    description: courseData.description,
+                    level: courseData.level,
+                    category: "Geral",
+                    thumbnail: courseData.coverUrl || thumbnail,
+                });
+
+                const existingLessonsResp = await api.get(`/courses/${courseId}/lessons`).catch(() => ({ data: [] }));
+                const existingLessons = existingLessonsResp.data || [];
+                for (const l of existingLessons) {
+                    await api.delete(`/courses/${courseId}/lessons/${l.id}`);
+                }
+
+                const nextLessons = courseData.modules.flatMap((m) => m.lessons).filter((l) => l.title.trim() && l.videoUrl.trim());
+                for (let i = 0; i < nextLessons.length; i++) {
+                    const lesson = nextLessons[i];
+                    if (!lesson) continue;
+                    await api.post(`/courses/${courseId}/lessons`, {
+                        title: lesson.title.trim(),
+                        description: "",
+                        videoUrl: lesson.videoUrl.trim(),
+                        duration: 0,
+                        order: i + 1,
+                    });
+                }
+
+                showToast("Alterações salvas! Redirecionando...");
+                setTimeout(() => router.push("/creator/courses"), 1200);
+            } catch (e) {
+                console.error("Failed to save edited course", e);
+                showToast("Erro ao salvar alterações.", "error");
+            }
         };
-
-        // Update individual course key
-        localStorage.setItem(`course_${courseId}`, JSON.stringify(updatedCourse));
-
-        // Update in published list
-        const list = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-        const updatedList = list.map((c: { id: string }) => c.id === courseId ? updatedCourse : c);
-        localStorage.setItem("creator_published_courses", JSON.stringify(updatedList));
-
-        showToast("Alterações salvas! Redirecionando... ✅");
-        setTimeout(() => router.push("/creator/courses"), 1500);
+        void save();
     };
 
     const addModule = () => {
@@ -215,7 +243,7 @@ export default function EditCoursePage() {
                     })}
                 </div>
 
-                {/* Step 1 – Details */}
+                {/* Step 1 - Details */}
                 {currentStep === 1 && (
                     <div style={{ maxWidth: "800px", margin: "0 auto", width: "100%" }}>
                         <Card style={{ borderRadius: "24px", border: `1px solid ${colors.border}`, background: colors.card }}>
@@ -251,7 +279,7 @@ export default function EditCoursePage() {
                     </div>
                 )}
 
-                {/* Step 2 – Content */}
+                {/* Step 2 - Content */}
                 {currentStep === 2 && (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "32px", alignItems: "start" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -358,7 +386,7 @@ export default function EditCoursePage() {
                     </div>
                 )}
 
-                {/* Step 3 – Save */}
+                {/* Step 3 - Save */}
                 {currentStep === 3 && (
                     <div style={{ maxWidth: "600px", margin: "0 auto", width: "100%", textAlign: "center" }}>
                         <div style={{ width: "80px", height: "80px", borderRadius: "24px", background: "rgba(145,70,255,0.1)", color: "#9146FF", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
@@ -401,3 +429,5 @@ export default function EditCoursePage() {
         </div>
     );
 }
+
+

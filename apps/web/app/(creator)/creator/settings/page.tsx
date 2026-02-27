@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import {
@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function CreatorSettingsPage() {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
-    const { user } = useAuth();
+    const { user, updateProfile, getSettings, updateSettings, changePassword } = useAuth();
     const { toast } = useToast();
     const [mounted, setMounted] = useState(false);
     const [activeTab, setActiveTab] = useState("profile");
@@ -55,36 +55,76 @@ export default function CreatorSettingsPage() {
 
     useEffect(() => {
         setMounted(true);
-        // Load from localStorage if exists
-        const saved = localStorage.getItem("creator_settings");
-        if (saved) {
-            const data = JSON.parse(saved);
-            if (data.profile) setProfile(data.profile);
-            if (data.platform) setPlatform(data.platform);
-            if (data.notifications) setNotifications(data.notifications);
-            setInitialSettings(data);
-        } else {
-            // Default initial settings
-            const defaults = {
-                profile: { name: user?.name || "Criador", bio: "", avatar: "" },
-                platform: { logo: "" },
-                notifications: { newEnrollments: true, performanceReports: true }
-            };
-            setInitialSettings(defaults);
-        }
+        const load = async () => {
+            try {
+                const settings = await getSettings?.();
+                const prefs = settings?.preferences || {};
+                const nextProfile = {
+                    name: user?.name || "Criador",
+                    bio: prefs.bio || "",
+                    avatar: prefs.avatar || "",
+                };
+                const nextPlatform = { logo: prefs.platform?.logo || "" };
+                const nextNotifications = {
+                    newEnrollments: settings?.notifications?.newEnrollments ?? true,
+                    performanceReports: settings?.notifications?.performanceReports ?? true,
+                };
+                setProfile(nextProfile);
+                setPlatform(nextPlatform);
+                setNotifications(nextNotifications);
+                setSecurity((prev) => ({ ...prev, enable2FA: Boolean(prefs.enable2FA ?? false) }));
+                setInitialSettings({
+                    profile: nextProfile,
+                    platform: nextPlatform,
+                    notifications: nextNotifications,
+                    security: { enable2FA: Boolean(prefs.enable2FA ?? false) },
+                });
+            } catch (e) {
+                console.error("Failed to load creator settings", e);
+                const defaults = {
+                    profile: { name: user?.name || "Criador", bio: "", avatar: "" },
+                    platform: { logo: "" },
+                    notifications: { newEnrollments: true, performanceReports: true },
+                    security: { enable2FA: false },
+                };
+                setInitialSettings(defaults);
+            }
+        };
+        void load();
     }, [user]);
 
     if (!mounted) return null;
 
     const handleSave = () => {
-        setIsSaving(true);
-        setTimeout(() => {
-            const settingsData = { profile, platform, notifications };
-            localStorage.setItem("creator_settings", JSON.stringify(settingsData));
-            setInitialSettings(settingsData);
-            setIsSaving(false);
-            toast("Configurações salvas!", "success", "Suas alterações foram aplicadas com sucesso.");
-        }, 800);
+        const save = async () => {
+            setIsSaving(true);
+            try {
+                if (activeTab === "profile") {
+                    await updateProfile?.({ name: profile.name });
+                    await updateSettings?.({ preferences: { bio: profile.bio, avatar: profile.avatar, platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
+                } else if (activeTab === "platform") {
+                    await updateSettings?.({ preferences: { bio: profile.bio, avatar: profile.avatar, platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
+                } else if (activeTab === "notifications") {
+                    await updateSettings?.({ notifications });
+                } else if (activeTab === "security") {
+                    if (security.currentPassword && security.newPassword) {
+                        await changePassword?.(security.currentPassword, security.newPassword);
+                    }
+                    await updateSettings?.({ preferences: { bio: profile.bio, avatar: profile.avatar, platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
+                    setSecurity((prev) => ({ ...prev, currentPassword: "", newPassword: "" }));
+                }
+
+                const settingsData = { profile, platform, notifications, security: { enable2FA: security.enable2FA } };
+                setInitialSettings(settingsData);
+                toast("Configurações salvas!", "success", "Suas alterações foram aplicadas com sucesso.");
+            } catch (e) {
+                console.error("Failed to save creator settings", e);
+                toast("Erro ao salvar", "error", "Tente novamente em instantes.");
+            } finally {
+                setIsSaving(false);
+            }
+        };
+        void save();
     };
 
     // Helper to check if a section has changes
@@ -264,7 +304,7 @@ export default function CreatorSettingsPage() {
                                             <label style={{ fontSize: "11px", fontWeight: 900, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px", display: "block" }}>Senha Atual</label>
                                             <input
                                                 type="password"
-                                                placeholder="••••••••"
+                                                placeholder="Sua senha atual"
                                                 style={{ width: "100%", height: "48px", padding: "0 16px", borderRadius: "12px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text, fontSize: "14px", fontWeight: 600, outline: "none" }}
                                             />
                                         </div>
@@ -403,3 +443,5 @@ export default function CreatorSettingsPage() {
         </div>
     );
 }
+
+

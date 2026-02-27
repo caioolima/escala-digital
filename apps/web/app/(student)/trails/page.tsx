@@ -1,30 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Map, Sparkles, Play, BookOpen } from "lucide-react";
+import { Map, Play, BookOpen, Search } from "lucide-react";
+import Image from "next/image";
 import { useTheme } from "next-themes";
 import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
+import { useLanguage } from "@/contexts/language-context";
 
 interface Course {
     id: string;
     title: string;
-    category: string;
-    thumbnail: string;
-    status: string;
+    category?: string;
+    thumbnail?: string;
 }
 
 interface Trail {
     id: string;
     title: string;
-    description: string;
-    accent: string;
-    courseIds: string[];
-    createdAt: string;
+    description?: string;
+    accent?: string;
+    courses?: Array<{ course?: Course; courseId?: string }>; // backend shape
+    courseIds?: string[]; // legacy localStorage shape
     cover?: string;
     progress?: number;
     totalCourses?: number;
     completedCourses?: number;
+    isMember?: boolean;
+}
+
+interface ApiTrail {
+    id: string;
+    title: string;
+    description?: string;
+    cover?: string;
+    courses?: Array<{ course?: { id: string }; courseId?: string }>;
+    courseIds?: string[];
 }
 
 function TrailsCatalogSkeleton({ isMobile }: { isMobile: boolean }) {
@@ -54,6 +66,10 @@ export default function TrailsCatalogPage() {
     const [isMobile, setIsMobile] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [trails, setTrails] = useState<Trail[]>([]);
+    const [myEnrollments, setMyEnrollments] = useState<string[]>([]);
+    const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
+    const [search, setSearch] = useState("");
+    const { t } = useLanguage();
 
     useEffect(() => {
         setMounted(true);
@@ -61,214 +77,293 @@ export default function TrailsCatalogPage() {
         checkMobile();
         window.addEventListener("resize", checkMobile);
 
-        const storedTrails: Trail[] = JSON.parse(localStorage.getItem("creator_published_trails") || "[]");
-        const storedCourses: Course[] = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-        const studentProgress: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                // Try backend first
+                const [trailsResp, coursesResp, enrollmentsResp] = await Promise.all([
+                    api.get('/trails'),
+                    api.get('/courses?published=true'),
+                    api.get('/enrollments/me').catch(() => ({ data: [] })),
+                ]);
 
-        const mappedTrails = storedTrails.map(t => {
-            const trailCourses = storedCourses.filter(c => t.courseIds.includes(c.id));
-            const completedCount = trailCourses.filter(c => studentProgress[c.id] === 100).length;
-            const progress = trailCourses.length > 0 ? Math.round((completedCount / trailCourses.length) * 100) : 0;
+                const fetchedTrails: ApiTrail[] = trailsResp.data || [];
+                const fetchedCourses: Course[] = coursesResp.data || [];
+                const enrolledCourseIds: string[] = (enrollmentsResp.data || []).map((e: any) => e.courseId);
+                setMyEnrollments(enrolledCourseIds);
 
-            return {
-                ...t,
-                cover: trailCourses[0]?.thumbnail || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80",
-                progress,
-                totalCourses: trailCourses.length,
-                completedCourses: completedCount,
-            };
-        });
+                // compute per-trail progress by aggregating course progress
+                const computeTrail = async (t: ApiTrail): Promise<Trail> => {
+                    const ids: string[] = (t.courses || []).map((tc) => tc.course?.id || tc.courseId).filter(Boolean) as string[];
+                    const trailCourses = fetchedCourses.filter(c => ids.includes(c.id));
 
-        setTrails(mappedTrails);
-        const timer = setTimeout(() => setIsLoading(false), 800);
+                    const percentages = await Promise.all(trailCourses.map(async (c) => {
+                        try {
+                            const r = await api.get(`/courses/${c.id}/progress`);
+                            return r.data?.percentage ?? 0;
+                        } catch {
+                            return 0;
+                        }
+                    }));
 
-        return () => {
-            window.removeEventListener("resize", checkMobile);
-            clearTimeout(timer);
+                    const completedCount = percentages.filter(p => p === 100).length;
+                    const progress = trailCourses.length > 0 ? Math.round((completedCount / trailCourses.length) * 100) : 0;
+
+                    return {
+                        id: t.id,
+                        title: t.title,
+                        description: t.description,
+                        cover: trailCourses[0]?.thumbnail || t.cover || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80",
+                        progress,
+                        totalCourses: trailCourses.length,
+                        completedCourses: completedCount,
+                        isMember: trailCourses.some((c) => enrolledCourseIds.includes(c.id)),
+                    } as Trail;
+                };
+                const mapped = await Promise.all(fetchedTrails.map((t: ApiTrail) => computeTrail(t)));
+                setTrails(mapped);
+            } catch {
+                // fallback to localStorage for offline/dev experience
+                try {
+                    const storedTrails: Trail[] = JSON.parse(localStorage.getItem('creator_published_trails') || '[]');
+                    const storedCourses: Course[] = JSON.parse(localStorage.getItem('creator_published_courses') || '[]');
+                    const studentProgress: Record<string, number> = JSON.parse(localStorage.getItem('student_progress') || '{}');
+
+                    const mapped = storedTrails.map(t => {
+                        const trailCourses = storedCourses.filter(c => (t.courseIds || []).includes(c.id));
+                        const completedCount = trailCourses.filter(c => (studentProgress[c.id] || 0) === 100).length;
+                        const progress = trailCourses.length > 0 ? Math.round((completedCount / trailCourses.length) * 100) : 0;
+                        const isMember = trailCourses.some(c => (studentProgress[c.id] || 0) > 0);
+                        return { ...t, progress, totalCourses: trailCourses.length, completedCourses: completedCount, isMember };
+                    });
+                    setTrails(mapped);
+                } catch (e) {
+                    console.error('Failed to load trails fallback', e);
+                }
+            } finally {
+                setIsLoading(false);
+            }
         };
+
+        fetchData();
+
+        return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
     if (!mounted) return null;
 
     const colors = {
-        bg: "var(--brand-bg)",
-        cardBg: "var(--brand-card)",
-        text: "var(--brand-text)",
-        textMuted: "var(--brand-text-muted)",
-        border: "var(--brand-border)",
-        accent: "var(--brand-accent)"
+        bg: 'var(--brand-bg)',
+        cardBg: 'var(--brand-card)',
+        text: 'var(--brand-text)',
+        textMuted: 'var(--brand-text-muted)',
+        border: 'var(--brand-border)',
+        accent: 'var(--brand-accent)'
     };
+    const searchedTrails = trails.filter((trail) => {
+        const q = search.trim().toLowerCase();
+        if (!q) return true;
+        const title = (trail.title || "").toLowerCase();
+        const description = (trail.description || "").toLowerCase();
+        return title.includes(q) || description.includes(q);
+    });
+    const filteredTrails = activeFilter === "mine" ? searchedTrails.filter((trail) => trail.isMember) : searchedTrails;
 
     return (
-        <div style={{ background: colors.bg, minHeight: "100%", color: colors.text, display: "flex", flexDirection: "column" }}>
+        <div style={{ background: colors.bg, minHeight: '100%', color: colors.text }}>
             <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
-                * { font-family: 'Plus Jakarta Sans', sans-serif; }
-                
-                .trail-card {
-                    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
-                }
-                .trail-card:hover {
-                    transform: translateY(-8px);
-                    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-                }
-                .trail-card:hover .cover-overlay {
-                    opacity: 1 !important;
-                }
+                .trail-card { transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), box-shadow 0.3s ease; }
+                .trail-card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+                .trail-card:hover .cover-overlay { opacity: 1 !important; }
             `}</style>
 
-            <header style={{
-                padding: isMobile ? "24px 20px" : "40px clamp(20px, 5vw, 60px)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "20px"
-            }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", color: colors.accent, marginBottom: "8px" }}>
+            <header style={{ padding: isMobile ? '24px 20px' : '40px clamp(20px,5vw,60px)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: colors.accent, marginBottom: '8px' }}>
                     <Map size={24} strokeWidth={2.5} />
-                    <span style={{ fontSize: "12px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1.5px" }}>Sua Jornada</span>
+                    <span style={{ fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.5px' }}>{t("trails.journey")}</span>
                 </div>
-                <h1 style={{ fontSize: isMobile ? "28px" : "42px", fontWeight: 900, letterSpacing: "-1.5px", lineHeight: 1 }}>Trilhas de Aprendizado</h1>
-                <p style={{ fontSize: "16px", color: colors.textMuted, maxWidth: "600px", lineHeight: 1.6, fontWeight: 500 }}>
-                    Caminhos guiados passo a passo para você atingir seus objetivos mais rápido. Escolha uma trilha e comece sua evolução.
-                </p>
+                <h1 style={{ fontSize: isMobile ? 28 : 42, fontWeight: 900, letterSpacing: '-1.5px', lineHeight: 1 }}>{t("trails.title")}</h1>
+                <p style={{ fontSize: 16, color: colors.textMuted, maxWidth: 600, lineHeight: 1.6, fontWeight: 500 }}>{t("trails.subtitle")}</p>
+                <div style={{
+                    position: "relative",
+                    zIndex: 100,
+                    display: "flex",
+                    flexDirection: isMobile ? "column" : "row",
+                    alignItems: isMobile ? "stretch" : "center",
+                    gap: isMobile ? "12px" : "16px",
+                    width: "100%",
+                    maxWidth: "1000px",
+                }}>
+                <div style={{
+                    position: "relative",
+                    flex: 1,
+                    width: "100%",
+                    background: isDark ? "rgba(15, 23, 42, 0.45)" : "rgba(255, 255, 255, 0.65)",
+                    backdropFilter: "blur(30px) saturate(180%)",
+                    padding: "8px",
+                    borderRadius: "24px",
+                    border: `1px solid ${isDark ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.5)"}`,
+                    boxShadow: isDark ? "0 20px 40px -12px rgba(0,0,0,0.45)" : "0 20px 40px -12px rgba(0,0,0,0.08)",
+                }}>
+                    <Search size={20} style={{ position: "absolute", left: "24px", top: "50%", transform: "translateY(-50%)", color: colors.accent, opacity: 0.7 }} />
+                    <input
+                        type="text"
+                        placeholder="Buscar trilhas por nome ou descrição..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        style={{
+                            width: "100%",
+                            height: "48px",
+                            padding: "0 16px 0 50px",
+                            background: "transparent",
+                            border: "none",
+                            borderRadius: "20px",
+                            fontSize: "15px",
+                            color: colors.text,
+                            outline: "none",
+                            fontWeight: 600,
+                        }}
+                    />
+                </div>
+                <div style={{
+                    background: isDark ? "rgba(15, 23, 42, 0.45)" : "rgba(255, 255, 255, 0.65)",
+                    backdropFilter: "blur(30px) saturate(180%)",
+                    padding: "6px",
+                    borderRadius: "18px",
+                    border: `1px solid ${isDark ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.5)"}`,
+                    boxShadow: isDark ? "0 20px 40px -12px rgba(0,0,0,0.45)" : "0 20px 40px -12px rgba(0,0,0,0.08)",
+                    display: "flex",
+                    gap: "4px",
+                    width: isMobile ? "100%" : "auto",
+                    maxWidth: isMobile ? "100%" : "auto",
+                }}>
+                    <div
+                        onClick={() => setActiveFilter("all")}
+                        style={{
+                            position: "relative",
+                            zIndex: 2,
+                            textAlign: "center",
+                            flex: isMobile ? 1 : undefined,
+                            padding: "10px 20px",
+                            borderRadius: "14px",
+                            color: activeFilter === "all" ? "white" : colors.textMuted,
+                            fontSize: "13px",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                            transition: "color 0.3s ease",
+                            whiteSpace: "nowrap",
+                        }}
+                    >
+                        {activeFilter === "all" && (
+                            <div style={{
+                                position: "absolute",
+                                inset: 0,
+                                background: colors.accent,
+                                borderRadius: "14px",
+                                zIndex: -1,
+                                boxShadow: `0 8px 20px ${colors.accent}40`,
+                            }} />
+                        )}
+                        Todas
+                    </div>
+                    <div
+                        onClick={() => setActiveFilter("mine")}
+                        style={{
+                            position: "relative",
+                            zIndex: 2,
+                            textAlign: "center",
+                            flex: isMobile ? 1 : undefined,
+                            padding: "10px 20px",
+                            borderRadius: "14px",
+                            color: activeFilter === "mine" ? "white" : colors.textMuted,
+                            fontSize: "13px",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                            transition: "color 0.3s ease",
+                            whiteSpace: "nowrap",
+                        }}
+                    >
+                        {activeFilter === "mine" && (
+                            <div style={{
+                                position: "absolute",
+                                inset: 0,
+                                background: colors.accent,
+                                borderRadius: "14px",
+                                zIndex: -1,
+                                boxShadow: `0 8px 20px ${colors.accent}40`,
+                            }} />
+                        )}
+                        Minhas trilhas
+                    </div>
+                </div>
+                </div>
             </header>
 
-            <main style={{ padding: isMobile ? "0 20px 80px" : "0 clamp(20px, 5vw, 60px) 100px", flex: 1 }}>
+            <main style={{ padding: isMobile ? '0 20px 80px' : '0 clamp(20px,5vw,60px) 100px', flex: 1 }}>
                 {isLoading ? (
                     <TrailsCatalogSkeleton isMobile={isMobile} />
-                ) : trails.length === 0 ? (
-                    <div style={{
-                        padding: "60px 20px",
-                        textAlign: "center",
-                        border: `2px dashed ${colors.border}`,
-                        borderRadius: "24px",
-                        background: colors.cardBg,
-                        marginTop: "20px"
-                    }}>
-                        <Map size={48} style={{ margin: "0 auto 20px", opacity: 0.3 }} />
-                        <h3 style={{ fontSize: "20px", fontWeight: 900, color: colors.text, marginBottom: "10px" }}>Nenhuma trilha encontrada</h3>
-                        <p style={{ fontSize: "14px", color: colors.textMuted, maxWidth: "300px", margin: "0 auto 30px", lineHeight: 1.6 }}>
-                            Novas trilhas serão publicadas em breve pela nossa equipe de criadores.
+                ) : filteredTrails.length === 0 ? (
+                    <div style={{ padding: '60px 20px', textAlign: 'center', border: `2px dashed ${colors.border}`, borderRadius: 24, background: colors.cardBg, marginTop: 20 }}>
+                        <Map size={48} style={{ margin: '0 auto 20px', opacity: 0.3 }} />
+                        <h3 style={{ fontSize: 20, fontWeight: 900, color: colors.text, marginBottom: 10 }}>
+                            {activeFilter === "mine" ? "Você ainda não participa de nenhuma trilha." : t("trails.emptyTitle")}
+                        </h3>
+                        <p style={{ fontSize: 14, color: colors.textMuted, maxWidth: 360, margin: '0 auto 30px', lineHeight: 1.6 }}>
+                            {activeFilter === "mine" ? "Entre em um curso para começar a fazer parte de trilhas relacionadas." : t("trails.emptyDesc")}
                         </p>
                         <button
-                            onClick={() => router.push("/catalog")}
-                            style={{
-                                padding: "12px 24px", borderRadius: "12px",
-                                background: colors.accent, color: "white",
-                                border: "none", fontWeight: 800, fontSize: "14px", cursor: "pointer"
-                            }}
+                            onClick={() => activeFilter === "mine" ? setActiveFilter("all") : router.push('/catalog')}
+                            style={{ padding: '12px 24px', borderRadius: 12, background: colors.accent, color: 'white', border: 'none', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}
                         >
-                            Explorar Catálogo de Cursos
+                            {activeFilter === "mine" ? "Ver todas as trilhas" : t("trails.exploreCatalog")}
                         </button>
                     </div>
                 ) : (
-                    <div style={{
-                        display: "grid",
-                        gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
-                        gap: "35px",
-                        marginTop: "20px"
-                    }}>
-                        {trails.map(trail => (
-                            <div
-                                key={trail.id}
-                                className="trail-card"
-                                onClick={() => router.push(`/trails/${trail.id}`)}
-                                style={{
-                                    background: colors.cardBg,
-                                    borderRadius: "24px",
-                                    overflow: "hidden",
-                                    border: `1px solid ${colors.border}`,
-                                    cursor: "pointer",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    position: "relative"
-                                }}
-                            >
-                                <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", background: "#f1f5f9" }}>
-                                    <img
-                                        src={trail.cover}
-                                        alt={trail.title}
-                                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                    />
-
-                                    <div className="cover-overlay" style={{
-                                        position: "absolute",
-                                        inset: 0,
-                                        background: "rgba(0,0,0,0.5)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        opacity: 0,
-                                        transition: "opacity 0.3s ease"
-                                    }}>
-                                        <div style={{
-                                            width: "60px",
-                                            height: "60px",
-                                            borderRadius: "50%",
-                                            background: "rgba(255,255,255,0.2)",
-                                            backdropFilter: "blur(10px)",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            color: "white"
-                                        }}>
-                                            <Play size={28} fill="currentColor" style={{ marginLeft: "4px" }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px,1fr))', gap: 35, marginTop: 20 }}>
+                        {filteredTrails.map((trail) => (
+                            <div key={trail.id} className="trail-card" onClick={() => router.push(`/trails/${trail.id}`)} style={{ background: colors.cardBg, borderRadius: 24, overflow: 'hidden', border: `1px solid ${colors.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#f1f5f9' }}>
+                                    <Image src={trail.cover || ''} alt={trail.title || 'trail cover'} style={{ objectFit: 'cover' }} fill sizes="(max-width: 768px) 100vw, 33vw" />
+                                    <div className="cover-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.3s ease' }}>
+                                        <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+                                            <Play size={28} fill="currentColor" style={{ marginLeft: 4 }} />
                                         </div>
                                     </div>
-
-                                    <div style={{
-                                        position: "absolute",
-                                        top: "16px",
-                                        left: "16px",
-                                        background: "rgba(0,0,0,0.6)",
-                                        backdropFilter: "blur(4px)",
-                                        color: "white",
-                                        padding: "6px 12px",
-                                        borderRadius: "100px",
-                                        fontSize: "12px",
-                                        fontWeight: 800,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "6px"
-                                    }}>
-                                        <BookOpen size={14} /> {trail.totalCourses} Cursos
+                                    <div style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', color: 'white', padding: '6px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <BookOpen size={14} /> {t("trails.coursesCount", { count: trail.totalCourses ?? 0 })}
                                     </div>
                                 </div>
-
-                                <div style={{ padding: "24px", display: "flex", flexDirection: "column", flex: 1 }}>
-                                    <h3 style={{ fontSize: "20px", fontWeight: 800, color: colors.text, marginBottom: "8px", lineHeight: 1.3 }}>
-                                        {trail.title}
-                                    </h3>
-
-                                    <p style={{
-                                        fontSize: "14px",
-                                        color: colors.textMuted,
-                                        lineHeight: 1.6,
-                                        marginBottom: "24px",
-                                        flex: 1,
-                                        display: "-webkit-box",
-                                        WebkitLineClamp: 2,
-                                        WebkitBoxOrient: "vertical",
-                                        overflow: "hidden"
-                                    }}>
-                                        {trail.description}
-                                    </p>
-
-                                    <div style={{ marginTop: "auto" }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "13px", fontWeight: 800 }}>
-                                            <span style={{ color: colors.textMuted }}>Progresso</span>
-                                            <span style={{ color: colors.accent }}>{trail.progress}%</span>
+                                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', flex: 1 }}>
+                                    <h3 style={{ fontSize: 20, fontWeight: 800, color: colors.text, marginBottom: 8, lineHeight: 1.3 }}>{trail.title}</h3>
+                                    {(() => {
+                                        const clampStyles: React.CSSProperties & { WebkitLineClamp?: number; WebkitBoxOrient?: string } = {
+                                            fontSize: 14,
+                                            color: colors.textMuted,
+                                            lineHeight: '1.6',
+                                            marginBottom: 24,
+                                            flex: 1,
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: 'vertical',
+                                            overflow: 'hidden'
+                                        };
+                                        return <p style={clampStyles}>{trail.description}</p>;
+                                    })()}
+                                    <div style={{ marginTop: 'auto' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, fontSize: 13, fontWeight: 800 }}>
+                                            <span style={{ color: colors.textMuted }}>{t("trails.progress")}</span>
+                                            <span style={{ color: colors.accent }}>{trail.progress ?? 0}%</span>
                                         </div>
-                                        <div style={{ height: "6px", width: "100%", background: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)", borderRadius: "10px", overflow: "hidden" }}>
-                                            <div style={{ height: "100%", width: `${trail.progress}%`, background: colors.accent, borderRadius: "10px", transition: "width 1s ease" }} />
+                                        <div style={{ height: 6, width: '100%', background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', borderRadius: 10, overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${trail.progress ?? 0}%`, background: colors.accent, borderRadius: 10, transition: 'width 1s ease' }} />
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         ))}
-                    </div >
+                    </div>
                 )}
-            </main >
-        </div >
+            </main>
+        </div>
     );
 }

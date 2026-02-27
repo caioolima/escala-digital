@@ -52,6 +52,33 @@ export class MailService {
         });
     }
 
+    async sendStudentWelcomeAccessEmail(input: {
+        to: string;
+        studentName: string;
+        companyName: string;
+        temporaryPassword: string;
+    }) {
+        const loginUrl = this.getAppUrl('/login');
+        const safeName = input.studentName || 'Aluno';
+        const safeCompany = input.companyName || 'sua empresa';
+
+        await this.send({
+            to: input.to,
+            subject: `Bem-vindo(a)! Seu acesso foi liberado por ${safeCompany}`,
+            text: `Olá, ${safeName}. Seu acesso foi liberado por ${safeCompany}. Login: ${input.to}. Senha temporária: ${input.temporaryPassword}. Recomendamos trocar a senha após o primeiro acesso.`,
+            html: this.renderEmailTemplate({
+                title: 'Bem-vindo(a) à plataforma',
+                subtitle: `Olá, ${this.escapeHtml(safeName)}. Seu acesso foi liberado pela empresa ${this.escapeHtml(safeCompany)}.`,
+                highlightLabel: 'Acesso inicial',
+                highlightValue: `E-mail: <strong>${this.escapeHtml(input.to)}</strong><br/>Senha temporária: <strong>${this.escapeHtml(input.temporaryPassword)}</strong>`,
+                note: 'Por segurança, recomendamos trocar sua senha após o primeiro login.',
+                actionLabel: 'Acessar plataforma',
+                actionUrl: loginUrl,
+                footer: 'Se você não esperava este acesso, entre em contato com sua empresa.',
+            }),
+        });
+    }
+
     async send(payload: MailPayload) {
         const sentBySmtp = await this.sendViaSmtp(payload);
         if (sentBySmtp) return;
@@ -162,7 +189,7 @@ export class MailService {
             <tr>
               <td style="padding:20px 24px;background:#ffffff;color:#0f172a;border-bottom:1px solid #e2e8f0;">
                 <div style="font-size:28px;line-height:1.1;letter-spacing:-0.5px;">
-                  <span style="color:#111827;font-weight:600;">Escala</span><span style="color:#3b82f6;font-weight:900;">Digital</span>
+                  <span style="color:#111827;font-weight:400;">Escala</span><span style="color:#3b82f6;font-weight:900;">Digital</span>
                 </div>
                 <div style="font-size:22px;font-weight:800;line-height:1.2;margin-top:12px;">${this.escapeHtml(input.title)}</div>
               </td>

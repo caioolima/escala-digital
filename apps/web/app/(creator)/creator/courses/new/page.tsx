@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast, ToastContainer } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
 
 export default function NewCoursePage() {
     const router = useRouter();
@@ -58,23 +59,7 @@ export default function NewCoursePage() {
 
     useEffect(() => {
         setMounted(true);
-        // Load from localStorage on mount
-        const savedData = localStorage.getItem("draft_course");
-        if (savedData) {
-            try {
-                setCourseData(JSON.parse(savedData));
-            } catch (e) {
-                console.error("Failed to load draft", e);
-            }
-        }
     }, []);
-
-    // Auto-save to localStorage
-    useEffect(() => {
-        if (mounted) {
-            localStorage.setItem("draft_course", JSON.stringify(courseData));
-        }
-    }, [courseData, mounted]);
 
     if (!mounted) return null;
 
@@ -87,54 +72,65 @@ export default function NewCoursePage() {
         accent: "#9146FF"
     };
 
+    const levelToApi = (level: string) => {
+        const normalized = level.toLowerCase();
+        if (normalized.includes("inter")) return "intermediate";
+        if (normalized.includes("avan")) return "advanced";
+        return "beginner";
+    };
+
+    const persistCourse = async (publish: boolean) => {
+        if (!courseData.title.trim() || !courseData.description.trim()) {
+            showToast("Preencha título e descrição.", "error");
+            return;
+        }
+
+        try {
+            const createResp = await api.post("/courses", {
+                title: courseData.title.trim(),
+                description: courseData.description.trim(),
+                level: levelToApi(courseData.level),
+                category: "Geral",
+                thumbnail: courseData.coverUrl || undefined,
+                published: publish,
+            });
+
+            const createdCourseId = createResp.data?.id as string;
+
+            const lessons = courseData.modules
+                .flatMap((m) => m.lessons)
+                .filter((l) => l.title.trim() && l.videoUrl.trim());
+
+            for (let i = 0; i < lessons.length; i++) {
+                const lesson = lessons[i];
+                if (!lesson) continue;
+                await api.post(`/courses/${createdCourseId}/lessons`, {
+                    title: lesson.title.trim(),
+                    description: "",
+                    videoUrl: lesson.videoUrl.trim(),
+                    duration: 0,
+                    order: i + 1,
+                });
+            }
+
+            if (publish && createResp.data?.published !== true) {
+                await api.patch(`/courses/${createdCourseId}`, { published: true });
+            }
+
+            showToast(publish ? "Curso publicado! Redirecionando..." : "Rascunho criado! Redirecionando...");
+            setTimeout(() => router.push("/creator/courses"), 1200);
+        } catch (e) {
+            console.error("Failed to persist course", e);
+            showToast("Erro ao salvar curso.", "error");
+        }
+    };
+
     const handleSaveDraft = () => {
-        localStorage.setItem("draft_course", JSON.stringify(courseData));
-        showToast("Rascunho salvo com sucesso!");
+        void persistCourse(false);
     };
 
     const handlePublish = () => {
-        const courseId = Date.now().toString();
-
-        // Get YouTube thumbnail from first lesson with a URL
-        const firstVideoUrl = courseData.modules
-            .flatMap(m => m.lessons)
-            .find(l => l.videoUrl.trim())?.videoUrl || "";
-
-        let thumbnail = "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop";
-        if (firstVideoUrl) {
-            try {
-                const u = new URL(firstVideoUrl);
-                const videoId = u.searchParams.get("v") || u.pathname.split("/").pop();
-                if (videoId) thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-            } catch { /* keep fallback */ }
-        }
-
-        // Save FULL course data (modules, lessons, videos, PDFs, etc.)
-        const fullCourse = {
-            id: courseId,
-            title: courseData.title,
-            description: courseData.description,
-            level: courseData.level,
-            status: "published",
-            students: 0,
-            lastUpdated: "Agora mesmo",
-            category: "Geral",
-            thumbnail: courseData.coverUrl || thumbnail,
-            modules: courseData.modules,
-        };
-
-        // Save full data for the view page
-        localStorage.setItem(`course_${courseId}`, JSON.stringify(fullCourse));
-
-        // Add to published courses list (for the courses page)
-        const existingCourses = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-        localStorage.setItem("creator_published_courses", JSON.stringify([fullCourse, ...existingCourses]));
-
-        // Clear draft
-        localStorage.removeItem("draft_course");
-
-        showToast("Curso publicado! Redirecionando...");
-        setTimeout(() => router.push("/creator/courses"), 1800);
+        void persistCourse(true);
     };
 
     const addModule = () => {
@@ -151,7 +147,7 @@ export default function NewCoursePage() {
         if (module && module.lessons.length > 0) {
             const lastLesson = module.lessons[module.lessons.length - 1];
             if (lastLesson && (!lastLesson.title.trim() || !lastLesson.videoUrl.trim())) {
-                alert("Preencha o título e o link do vídeo da aula atual antes de adicionar uma nova! ✍️");
+                alert("Preencha o título e o link do vídeo da aula atual antes de adicionar uma nova!");
                 return;
             }
         }
@@ -568,7 +564,7 @@ export default function NewCoursePage() {
 
                                     <div style={{ marginTop: "20px", padding: "12px", borderRadius: "14px", background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.1)", display: "flex", gap: "10px", alignItems: "center" }}>
                                         <CheckCircle2 size={16} color="#10b981" />
-                                        <span style={{ fontSize: "11px", color: "#065f46", fontWeight: 700 }}>Formatamos o player automaticamente! ✨</span>
+                                        <span style={{ fontSize: "11px", color: "#065f46", fontWeight: 700 }}>Formatamos o player automaticamente.</span>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -604,3 +600,5 @@ export default function NewCoursePage() {
         </div>
     );
 }
+
+

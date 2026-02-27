@@ -33,6 +33,8 @@ model User {
   name         String
   password     String
   avatarUrl    String?
+  preferences  Json?
+  notifications Json?
   role         Role             @default(STUDENT)
   companyId    String
   company      Company          @relation(fields: [companyId], references: [id])

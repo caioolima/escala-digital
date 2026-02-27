@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -19,6 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
 
 interface Lesson { id: string; videoUrl: string; }
 interface Module { id: string; lessons: Lesson[]; }
@@ -58,9 +59,30 @@ export default function CreatorDashboardPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const stored: Course[] = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-        setCourses(stored);
-        setTimeout(() => setLoading(false), 500);
+        const fetchCourses = async () => {
+            setLoading(true);
+            try {
+                const resp = await api.get("/courses");
+                const data = (resp.data || []).map((c: any) => ({
+                    id: c.id,
+                    title: c.title,
+                    description: c.description,
+                    thumbnail: c.thumbnail || "",
+                    status: c.published ? "published" : "draft",
+                    students: c.studentsCount ?? 0,
+                    lastUpdated: c.updatedAt ? new Date(c.updatedAt).toLocaleDateString("pt-BR") : "—",
+                    category: c.category || "Geral",
+                    modules: c.modules,
+                })) as Course[];
+                setCourses(data);
+            } catch (e) {
+                console.error("Failed to fetch creator dashboard courses", e);
+                setCourses([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchCourses();
     }, []);
 
     const colors = {
@@ -117,7 +139,7 @@ export default function CreatorDashboardPage() {
                                 </div>
                                 <div>
                                     <p style={{ fontSize: "28px", fontWeight: 900, color: colors.text, margin: 0, lineHeight: 1 }}>
-                                        {loading ? "—" : stat.value}
+                                        {loading ? "..." : stat.value}
                                     </p>
                                     <p style={{ fontSize: "12px", color: colors.textMuted, fontWeight: 600, margin: "4px 0 0" }}>{stat.label}</p>
                                 </div>
@@ -209,3 +231,5 @@ export default function CreatorDashboardPage() {
         </div>
     );
 }
+
+

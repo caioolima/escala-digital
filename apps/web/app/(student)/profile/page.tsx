@@ -1,26 +1,26 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import {
     User,
     Bell,
     Shield,
-    CreditCard,
+    // CreditCard removed (unused)
     LogOut,
     Camera,
-    Award,
-    Clock,
+    // Award, Clock removed (unused)
     BookOpen,
     Settings,
     ChevronRight,
-    Edit3,
     CheckCircle2,
-    RotateCcw
-} from "lucide-react";
+    } from "lucide-react";
 import { useTheme } from "next-themes";
+import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/contexts/toast-context";
-import { Skeleton, SkeletonCircle, SkeletonText } from "@/components/ui/skeleton";
+import { useLanguage } from "@/contexts/language-context";
+import { Skeleton, SkeletonCircle } from "@/components/ui/skeleton";
+// useAuth already imported above; no duplicate imports
 
 function ProfileSkeleton({ isMobile }: { isMobile: boolean }) {
     return (
@@ -64,12 +64,58 @@ function ProfileSkeleton({ isMobile }: { isMobile: boolean }) {
     );
 }
 
-export default function ProfilePage() {
-    const { resolvedTheme } = useTheme();
-    const { user, logout } = useAuth();
+function PersonalDataForm({ user, colors, isDark }: { user: { name?: string; email?: string } | null; colors: Record<string, string>; isDark: boolean }) {
+    const { updateProfile } = useAuth();
     const { showToast } = useToast();
+    const [name, setName] = useState<string>(user?.name || "");
+    const [email, setEmail] = useState<string>(user?.email || "");
+    const [isSaving, setIsSaving] = useState(false);
+    const initialName = user?.name || "";
+    const initialEmail = user?.email || "";
+    const hasChanges = name.trim() !== initialName.trim() || email.trim() !== initialEmail.trim();
+
+    useEffect(() => {
+        setName(user?.name || "");
+        setEmail(user?.email || "");
+    }, [user?.name, user?.email]);
+
+    const onSave = async () => {
+        if (!hasChanges) return;
+        setIsSaving(true);
+        try {
+            await updateProfile?.({ name: name.trim(), email: email.trim() });
+            showToast("Dados pessoais salvos com sucesso.", "success");
+        } catch (e) {
+            console.error("Failed to update profile", e);
+            showToast("Erro ao salvar dados pessoais.", "error");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>NOME COMPLETO</label>
+                <input value={name} onChange={e => setName(e.target.value)} style={{ padding: "16px", borderRadius: "14px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text, fontSize: "16px", fontWeight: 600 }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>E-MAIL</label>
+                <input value={email} onChange={e => setEmail(e.target.value)} style={{ padding: "16px", borderRadius: "14px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text, fontSize: "16px", fontWeight: 600 }} />
+            </div>
+            <button disabled={isSaving || !hasChanges} onClick={onSave} style={{ marginTop: "12px", padding: "18px", borderRadius: "16px", background: colors.accent, color: "white", border: "none", fontWeight: 900, fontSize: "16px", cursor: (isSaving || !hasChanges) ? "not-allowed" : "pointer", opacity: (!hasChanges && !isSaving) ? 0.6 : 1, boxShadow: `0 12px 24px ${colors.accent}40` }}>{isSaving ? "Salvando..." : "Salvar Alterações"}</button>
+        </div>
+    );
+}
+
+export default function ProfilePage() {
+    const { resolvedTheme, setTheme } = useTheme();
+    const { user, logout, changePassword, getSettings, updateSettings } = useAuth();
+    const { showToast } = useToast();
+    const { setLanguage: setAppLanguage, t } = useLanguage();
     const isDark = resolvedTheme === "dark";
-    const [userStats, setUserStats] = useState({
+    type UserStats = { courses: string; completedLessons: string };
+    const [userStats, setUserStats] = useState<UserStats>({
         courses: "00",
         completedLessons: "00"
     });
@@ -77,6 +123,21 @@ export default function ProfilePage() {
     const [isMobile, setIsMobile] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [activeSection, setActiveSection] = useState<string | null>(null);
+    const [settings, setSettings] = useState<{ preferences?: any; notifications?: any } | null>(null);
+    const defaultNotifications = { newCoursesEmail: true };
+    const [notificationPrefs, setNotificationPrefs] = useState(defaultNotifications);
+    const [initialNotificationPrefs, setInitialNotificationPrefs] = useState(defaultNotifications);
+    const [language, setLanguage] = useState("pt-BR");
+    const [initialLanguage, setInitialLanguage] = useState("pt-BR");
+    const [preferredTheme, setPreferredTheme] = useState<"light" | "dark">(isDark ? "dark" : "light");
+    const [initialPreferredTheme, setInitialPreferredTheme] = useState<"light" | "dark">(isDark ? "dark" : "light");
+    const [enable2FA, setEnable2FA] = useState(false);
+    const [initialEnable2FA, setInitialEnable2FA] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+    const [isSavingPreferences, setIsSavingPreferences] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -84,34 +145,90 @@ export default function ProfilePage() {
         checkMobile();
         window.addEventListener("resize", checkMobile);
 
-        // Calculate real stats from localStorage
-        try {
-            const studentProgress: Record<string, number> = JSON.parse(localStorage.getItem("student_progress") || "{}");
-            const activeCoursesCount = Object.keys(studentProgress).filter(id => (studentProgress[id] || 0) < 100).length;
+        // Fetch real stats from the backend (enrollments + course progress)
+        const fetchStats = async () => {
+            setIsLoading(true);
+            try {
+                const enrollResp = await api.get('/enrollments/me');
+                const enrollments: Array<{ courseId?: string; course?: { id?: string } }> = enrollResp.data || [];
 
-            const completedLessons: Record<string, boolean> = JSON.parse(localStorage.getItem("student_completed_lessons") || "{}");
-            const allCourses: any[] = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
+                // For each enrolled course, get progress and aggregate
+                const progressPromises = enrollments.map(async (en) => {
+                    const courseId = en.courseId || en.course?.id;
+                    if (!courseId) return { total: 0, completed: 0, percentage: 0 };
+                    try {
+                        const resp = await api.get(`/courses/${courseId}/progress`);
+                        return resp.data || { total: 0, completed: 0, percentage: 0 };
+                    } catch (e) {
+                        console.warn('progress fetch failed for', courseId, e);
+                        return { total: 0, completed: 0, percentage: 0 };
+                    }
+                });
 
-            // Format status object
+                const progresses = await Promise.all(progressPromises);
 
-            const stats = {
-                courses: activeCoursesCount.toString().padStart(2, '0'),
-                completedLessons: Object.keys(completedLessons).length.toString().padStart(2, '0')
-            };
+                const activeCoursesCount = progresses.filter(p => (p.percentage ?? 0) < 100).length;
+                const completedLessonsCount = progresses.reduce((acc, p) => acc + (p.completed ?? 0), 0);
 
-            setUserStats(stats as any);
-            localStorage.setItem("user_profile_stats", JSON.stringify(stats));
-        } catch (e) {
-            console.error("Failed to calc real stats", e);
-        }
+                const stats: UserStats = {
+                    courses: activeCoursesCount.toString().padStart(2, '0'),
+                    completedLessons: completedLessonsCount.toString().padStart(2, '0')
+                };
 
-        const timer = setTimeout(() => setIsLoading(false), 1200);
+                setUserStats(stats);
+                // keep a local cache for occasional offline dev
+                try { localStorage.setItem('user_profile_stats', JSON.stringify(stats)); } catch { /* ignore */ }
+            } catch (err) {
+                console.error('Failed to fetch user stats', err);
+                // fallback to cached stats if available
+                try {
+                    const cached = JSON.parse(localStorage.getItem('user_profile_stats') || 'null');
+                    if (cached && cached.courses) setUserStats(cached as UserStats);
+                } catch (e) {
+                    console.warn('failed to read cached user_profile_stats', e);
+                }
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchStats();
 
         return () => {
             window.removeEventListener("resize", checkMobile);
-            clearTimeout(timer);
         };
     }, []);
+
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const data = await getSettings?.();
+                const next = data || { preferences: null, notifications: null };
+                setSettings(next);
+
+                const loadedNotifications = {
+                    newCoursesEmail: next.notifications?.newCoursesEmail ?? true,
+                };
+                setNotificationPrefs(loadedNotifications);
+                setInitialNotificationPrefs(loadedNotifications);
+
+                const loadedLanguage = next.preferences?.language ?? "pt-BR";
+                const loadedTheme = (next.preferences?.theme === "light" || next.preferences?.theme === "dark") ? next.preferences.theme : (resolvedTheme === "dark" ? "dark" : "light");
+                const loaded2FA = Boolean(next.preferences?.enable2FA ?? next.preferences?.security?.enable2FA ?? false);
+
+                setLanguage(loadedLanguage);
+                setAppLanguage(loadedLanguage as "pt-BR" | "en" | "es");
+                setInitialLanguage(loadedLanguage);
+                setPreferredTheme(loadedTheme);
+                setInitialPreferredTheme(loadedTheme);
+                setEnable2FA(loaded2FA);
+                setInitialEnable2FA(loaded2FA);
+            } catch (e) {
+                console.warn("failed to load user settings", e);
+            }
+        };
+        loadSettings();
+    }, [getSettings, resolvedTheme]);
 
     if (!mounted) return null;
 
@@ -131,11 +248,92 @@ export default function ProfilePage() {
     ];
 
     const menuItems = [
-        { id: "personal", icon: User, label: "Dados Pessoais", sub: "Nome, e-mail e foto" },
+        { id: "personal", icon: User, label: t("profile.personalData"), sub: "Nome, e-mail e foto" },
         { id: "security", icon: Shield, label: "Segurança", sub: "Alterar senha e 2FA" },
-        { id: "notifications", icon: Bell, label: "Notificações", sub: "Alertas e e-mails" },
-        { id: "preferences", icon: Settings, label: "Preferências", sub: "Idioma e tema" },
+        { id: "notifications", icon: Bell, label: t("profile.notificationsTitle"), sub: "Alertas e e-mails" },
+        { id: "preferences", icon: Settings, label: t("profile.preferencesTitle"), sub: "Idioma e tema" },
     ];
+
+    const notificationItems = [
+        { key: "newCoursesEmail", label: "E-mails de novos cursos" },
+    ] as const;
+
+    const hasNotificationChanges = JSON.stringify(notificationPrefs) !== JSON.stringify(initialNotificationPrefs);
+    const hasPreferencesChanges = language !== initialLanguage || preferredTheme !== initialPreferredTheme;
+    const hasSecurityChanges = enable2FA !== initialEnable2FA || currentPassword.length > 0 || newPassword.length > 0;
+
+    const handleSaveSecurity = async () => {
+        if (!hasSecurityChanges) return;
+
+        if ((currentPassword && !newPassword) || (!currentPassword && newPassword)) {
+            showToast("Preencha senha atual e nova senha.", "error");
+            return;
+        }
+
+        if (newPassword && newPassword.length < 8) {
+            showToast("A nova senha precisa ter no mínimo 8 caracteres.", "error");
+            return;
+        }
+
+        setIsChangingPassword(true);
+        try {
+            if (currentPassword && newPassword) {
+                await changePassword?.(currentPassword, newPassword);
+            }
+
+            if (enable2FA !== initialEnable2FA) {
+                const updatedPreferences = { ...(settings?.preferences || {}), language, theme: preferredTheme, enable2FA };
+                await updateSettings?.({ preferences: updatedPreferences });
+                setSettings((prev) => ({ ...(prev || {}), preferences: updatedPreferences }));
+                setInitialEnable2FA(enable2FA);
+            }
+
+            setCurrentPassword("");
+            setNewPassword("");
+            showToast("Configurações de segurança salvas.", "success");
+        } catch (e) {
+            console.error("Failed to update security settings", e);
+            showToast("Erro ao salvar configurações de segurança.", "error");
+        } finally {
+            setIsChangingPassword(false);
+        }
+    };
+
+    const handleSaveNotifications = async () => {
+        if (!hasNotificationChanges) return;
+        setIsSavingNotifications(true);
+        try {
+            await updateSettings?.({ notifications: notificationPrefs });
+            setInitialNotificationPrefs(notificationPrefs);
+            setSettings((prev) => ({ ...(prev || {}), notifications: notificationPrefs }));
+            showToast("Notificações salvas com sucesso.", "success");
+        } catch (e) {
+            console.error("Failed to update notification settings", e);
+            showToast("Erro ao salvar notificações.", "error");
+        } finally {
+            setIsSavingNotifications(false);
+        }
+    };
+
+    const handleSavePreferences = async () => {
+        if (!hasPreferencesChanges) return;
+        setIsSavingPreferences(true);
+        try {
+            const updatedPreferences = { ...(settings?.preferences || {}), language, theme: preferredTheme, enable2FA };
+            await updateSettings?.({ preferences: updatedPreferences });
+            setTheme(preferredTheme);
+            setAppLanguage(language as "pt-BR" | "en" | "es");
+            setInitialLanguage(language);
+            setInitialPreferredTheme(preferredTheme);
+            setSettings((prev) => ({ ...(prev || {}), preferences: updatedPreferences }));
+            showToast("Preferências salvas com sucesso.", "success");
+        } catch (e) {
+            console.error("Failed to update preferences", e);
+            showToast("Erro ao salvar preferências.", "error");
+        } finally {
+            setIsSavingPreferences(false);
+        }
+    };
 
     return (
         <div style={{ background: colors.bg, minHeight: "100%", color: colors.text }}>
@@ -155,7 +353,7 @@ export default function ProfilePage() {
                 <div style={{ position: "relative", zIndex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px", color: colors.accent, marginBottom: "12px" }}>
                         <div style={{ width: "32px", height: "2px", background: colors.accent }}></div>
-                        <span style={{ fontSize: "12px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "3px" }}>Configurações Pessoais</span>
+                        <span style={{ fontSize: "12px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "3px" }}>Configurações da Conta</span>
                     </div>
                     <h1 style={{
                         fontSize: "clamp(32px, 5vw, 48px)",
@@ -423,37 +621,56 @@ export default function ProfilePage() {
                                             <p style={{ color: colors.textMuted, marginBottom: "32px" }}>Atualize suas informações de contato e foto do perfil.</p>
 
                                             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                                                {/* Personal data form */}
+                                                <PersonalDataForm user={user} colors={colors} isDark={isDark} />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeSection === "security" && (
+                                        <div>
+                                            <h3 style={{ fontSize: "24px", fontWeight: 900, marginBottom: "8px" }}>Segurança</h3>
+                                            <p style={{ color: colors.textMuted, marginBottom: "32px" }}>{t("profile.securityDesc")}</p>
+
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                                    <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>NOME COMPLETO</label>
-                                                    <input
-                                                        defaultValue={user?.name}
-                                                        style={{
-                                                            padding: "16px",
-                                                            borderRadius: "14px",
-                                                            background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
-                                                            border: `1px solid ${colors.border}`,
-                                                            color: colors.text,
-                                                            fontSize: "16px",
-                                                            fontWeight: 600
-                                                        }}
-                                                    />
+                                                    <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>{t("profile.currentPassword")}</label>
+                                                    <input value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} type="password" placeholder="********" style={{ padding: "16px", borderRadius: "14px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text }} />
                                                 </div>
                                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                                    <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>E-MAIL</label>
-                                                    <input
-                                                        defaultValue={user?.email}
-                                                        style={{
-                                                            padding: "16px",
-                                                            borderRadius: "14px",
-                                                            background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
-                                                            border: `1px solid ${colors.border}`,
-                                                            color: colors.text,
-                                                            fontSize: "16px",
-                                                            fontWeight: 600
-                                                        }}
-                                                    />
+                                                    <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>{t("profile.newPassword")}</label>
+                                                    <input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" placeholder={t("profile.passwordMin")} style={{ padding: "16px", borderRadius: "14px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text }} />
                                                 </div>
-                                                <button style={{
+                                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px", borderRadius: "20px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}` }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 800 }}>{t("profile.twoFactor")}</div>
+                                                        <div style={{ fontSize: "13px", color: colors.textMuted }}>{t("profile.twoFactorDesc")}</div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setEnable2FA(prev => !prev)}
+                                                        style={{
+                                                            width: "48px",
+                                                            height: "26px",
+                                                            borderRadius: "100px",
+                                                            background: enable2FA ? colors.accent : (isDark ? "rgba(255,255,255,0.1)" : "#e2e8f0"),
+                                                            position: "relative",
+                                                            cursor: "pointer",
+                                                            border: "none"
+                                                        }}>
+                                                        <div style={{
+                                                            position: "absolute",
+                                                            top: "3px",
+                                                            right: enable2FA ? "3px" : "auto",
+                                                            left: enable2FA ? "auto" : "3px",
+                                                            width: "20px",
+                                                            height: "20px",
+                                                            borderRadius: "50%",
+                                                            background: "white",
+                                                            boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                                                        }}></div>
+                                                    </button>
+                                                </div>
+                                                <button onClick={handleSaveSecurity} disabled={isChangingPassword || !hasSecurityChanges} style={{
                                                     marginTop: "12px",
                                                     padding: "18px",
                                                     borderRadius: "16px",
@@ -462,41 +679,11 @@ export default function ProfilePage() {
                                                     border: "none",
                                                     fontWeight: 900,
                                                     fontSize: "16px",
-                                                    cursor: "pointer",
+                                                    cursor: (isChangingPassword || !hasSecurityChanges) ? "not-allowed" : "pointer",
+                                                    opacity: (!hasSecurityChanges && !isChangingPassword) ? 0.6 : 1,
                                                     boxShadow: `0 12px 24px ${colors.accent}40`
                                                 }}>
-                                                    Salvar Alterações
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeSection === "security" && (
-                                        <div>
-                                            <h3 style={{ fontSize: "24px", fontWeight: 900, marginBottom: "8px" }}>Segurança</h3>
-                                            <p style={{ color: colors.textMuted, marginBottom: "32px" }}>Mantenha sua conta protegida alterando sua senha regularmente.</p>
-
-                                            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                                    <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>SENHA ATUAL</label>
-                                                    <input type="password" placeholder="••••••••" style={{ padding: "16px", borderRadius: "14px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text }} />
-                                                </div>
-                                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                                    <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>NOVA SENHA</label>
-                                                    <input type="password" placeholder="Mínimo 8 caracteres" style={{ padding: "16px", borderRadius: "14px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text }} />
-                                                </div>
-                                                <button style={{
-                                                    marginTop: "12px",
-                                                    padding: "18px",
-                                                    borderRadius: "16px",
-                                                    background: colors.text,
-                                                    color: isDark ? "#000" : "#fff",
-                                                    border: "none",
-                                                    fontWeight: 900,
-                                                    fontSize: "16px",
-                                                    cursor: "pointer"
-                                                }}>
-                                                    Atualizar Senha
+                                                    {isChangingPassword ? "Salvando..." : t("profile.saveChanges")}
                                                 </button>
                                             </div>
                                         </div>
@@ -504,12 +691,12 @@ export default function ProfilePage() {
 
                                     {activeSection === "notifications" && (
                                         <div>
-                                            <h3 style={{ fontSize: "24px", fontWeight: 900, marginBottom: "8px" }}>Notificações</h3>
-                                            <p style={{ color: colors.textMuted, marginBottom: "32px" }}>Escolha como e quando você quer ser notificado.</p>
+                                            <h3 style={{ fontSize: "24px", fontWeight: 900, marginBottom: "8px" }}>{t("profile.notificationsTitle")}</h3>
+                                            <p style={{ color: colors.textMuted, marginBottom: "32px" }}>{t("profile.notificationsDesc")}</p>
 
                                             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                                                {["E-mails de novos cursos", "Alertas de certificados", "Novidades da plataforma"].map((label, i) => (
-                                                    <div key={label} style={{
+                                                {notificationItems.map((item) => (
+                                                    <div key={item.key} style={{
                                                         display: "flex",
                                                         alignItems: "center",
                                                         justifyContent: "space-between",
@@ -518,29 +705,45 @@ export default function ProfilePage() {
                                                         background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
                                                         border: `1px solid ${colors.border}`
                                                     }}>
-                                                        <span style={{ fontWeight: 700 }}>{label}</span>
-                                                        <div style={{
+                                                        <span style={{ fontWeight: 700 }}>{item.label}</span>
+                                                        <button onClick={() => setNotificationPrefs(prev => ({ ...prev, [item.key]: !prev[item.key] }))} style={{
                                                             width: "48px",
                                                             height: "26px",
                                                             borderRadius: "100px",
-                                                            background: i < 2 ? colors.accent : (isDark ? "rgba(255,255,255,0.1)" : "#e2e8f0"),
+                                                            background: notificationPrefs[item.key] ? colors.accent : (isDark ? "rgba(255,255,255,0.1)" : "#e2e8f0"),
                                                             position: "relative",
-                                                            cursor: "pointer"
+                                                            cursor: "pointer",
+                                                            border: "none"
                                                         }}>
                                                             <div style={{
                                                                 position: "absolute",
                                                                 top: "3px",
-                                                                right: i < 2 ? "3px" : "auto",
-                                                                left: i < 2 ? "auto" : "3px",
+                                                                right: notificationPrefs[item.key] ? "3px" : "auto",
+                                                                left: notificationPrefs[item.key] ? "auto" : "3px",
                                                                 width: "20px",
                                                                 height: "20px",
                                                                 borderRadius: "50%",
                                                                 background: "white",
                                                                 boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
                                                             }}></div>
-                                                        </div>
+                                                        </button>
                                                     </div>
                                                 ))}
+
+                                                <button onClick={handleSaveNotifications} disabled={isSavingNotifications || !hasNotificationChanges} style={{
+                                                    marginTop: "12px",
+                                                    padding: "18px",
+                                                    borderRadius: "16px",
+                                                    background: colors.accent,
+                                                    color: "white",
+                                                    border: "none",
+                                                    fontWeight: 900,
+                                                    fontSize: "16px",
+                                                    cursor: (isSavingNotifications || !hasNotificationChanges) ? "not-allowed" : "pointer",
+                                                    opacity: (!hasNotificationChanges && !isSavingNotifications) ? 0.6 : 1
+                                                }}>
+                                                    {isSavingNotifications ? "Salvando..." : t("profile.saveChanges")}
+                                                </button>
                                             </div>
                                         </div>
                                     )}
@@ -548,30 +751,32 @@ export default function ProfilePage() {
 
                                     {activeSection === "preferences" && (
                                         <div>
-                                            <h3 style={{ fontSize: "24px", fontWeight: 900, marginBottom: "8px" }}>Preferências</h3>
-                                            <p style={{ color: colors.textMuted, marginBottom: "32px" }}>Personalize sua experiência na plataforma.</p>
+                                            <h3 style={{ fontSize: "24px", fontWeight: 900, marginBottom: "8px" }}>{t("profile.preferencesTitle")}</h3>
+                                            <p style={{ color: colors.textMuted, marginBottom: "32px" }}>{t("profile.preferencesDesc")}</p>
 
                                             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                                    <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>IDIOma</label>
-                                                    <select style={{ padding: "16px", borderRadius: "14px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text, fontWeight: 600 }}>
-                                                        <option>Português (Brasil)</option>
-                                                        <option>English</option>
-                                                        <option>Español</option>
+                                                    <label style={{ fontSize: "14px", fontWeight: 800, color: colors.textMuted }}>{t("profile.language")}</label>
+                                                    <select value={language} onChange={e => { const next = e.target.value; setLanguage(next); setAppLanguage(next as "pt-BR" | "en" | "es"); }} style={{ padding: "16px", borderRadius: "14px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text, fontWeight: 600, WebkitTextFillColor: colors.text }}>
+                                                        <option value="pt-BR" style={{ color: "#0f172a", background: "#ffffff" }}>Português (Brasil)</option>
+                                                        <option value="en" style={{ color: "#0f172a", background: "#ffffff" }}>English</option>
+                                                        <option value="es" style={{ color: "#0f172a", background: "#ffffff" }}>Espanol</option>
                                                     </select>
                                                 </div>
                                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px", borderRadius: "20px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}` }}>
                                                     <div>
-                                                        <div style={{ fontWeight: 800 }}>Modo Noturno</div>
-                                                        <div style={{ fontSize: "13px", color: colors.textMuted }}>Mudar aparência da plataforma</div>
+                                                        <div style={{ fontWeight: 800 }}>{t("profile.darkMode")}</div>
+                                                        <div style={{ fontSize: "13px", color: colors.textMuted }}>
+                                                            {preferredTheme === "dark" ? t("profile.disableDarkMode") : t("profile.enableDarkMode")}
+                                                        </div>
                                                     </div>
                                                     <button
-                                                        onClick={() => useTheme().setTheme(isDark ? "light" : "dark")}
+                                                        onClick={() => setPreferredTheme(prev => prev === "dark" ? "light" : "dark")}
                                                         style={{
                                                             width: "48px",
                                                             height: "26px",
                                                             borderRadius: "100px",
-                                                            background: isDark ? colors.accent : "#e2e8f0",
+                                                            background: preferredTheme === "dark" ? colors.accent : "#e2e8f0",
                                                             position: "relative",
                                                             cursor: "pointer",
                                                             border: "none"
@@ -579,8 +784,8 @@ export default function ProfilePage() {
                                                         <div style={{
                                                             position: "absolute",
                                                             top: "3px",
-                                                            right: isDark ? "3px" : "auto",
-                                                            left: isDark ? "auto" : "3px",
+                                                            right: preferredTheme === "dark" ? "3px" : "auto",
+                                                            left: preferredTheme === "dark" ? "auto" : "3px",
                                                             width: "20px",
                                                             height: "20px",
                                                             borderRadius: "50%",
@@ -590,46 +795,20 @@ export default function ProfilePage() {
                                                     </button>
                                                 </div>
 
-                                                <div style={{ padding: "20px", borderRadius: "20px", background: "rgba(239, 68, 68, 0.05)", border: "1px solid rgba(239, 68, 68, 0.2)", marginTop: "12px" }}>
-                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                                        <div>
-                                                            <div style={{ fontWeight: 800, color: "#ef4444" }}>Resetar Progresso</div>
-                                                            <div style={{ fontSize: "12px", color: isDark ? "rgba(239, 68, 68, 0.7)" : "#ef4444" }}>Limpar todas as aulas concluídas e avaliações</div>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => {
-                                                                if (confirm("Tem certeza que deseja limpar todo o seu progresso? Isso não pode ser desfeito.")) {
-                                                                    localStorage.removeItem("student_completed_lessons");
-                                                                    localStorage.removeItem("student_progress");
-                                                                    localStorage.removeItem("user_profile_stats");
-                                                                    localStorage.removeItem("student_watched_times");
-                                                                    Object.keys(localStorage).forEach(key => {
-                                                                        if (key.startsWith("course_finished_") || key.startsWith("course_evaluated_")) {
-                                                                            localStorage.removeItem(key);
-                                                                        }
-                                                                    });
-                                                                    showToast("Progresso Restaurado.", "info");
-                                                                    setTimeout(() => window.location.reload(), 1500);
-                                                                }
-                                                            }}
-                                                            style={{
-                                                                padding: "10px 16px",
-                                                                borderRadius: "12px",
-                                                                background: "#ef4444",
-                                                                color: "white",
-                                                                border: "none",
-                                                                fontWeight: 800,
-                                                                fontSize: "13px",
-                                                                cursor: "pointer",
-                                                                display: "flex",
-                                                                alignItems: "center",
-                                                                gap: "8px"
-                                                            }}
-                                                        >
-                                                            <RotateCcw size={14} /> Limpar Tudo
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                                <button onClick={handleSavePreferences} disabled={isSavingPreferences || !hasPreferencesChanges} style={{
+                                                    marginTop: "12px",
+                                                    padding: "18px",
+                                                    borderRadius: "16px",
+                                                    background: colors.accent,
+                                                    color: "white",
+                                                    border: "none",
+                                                    fontWeight: 900,
+                                                    fontSize: "16px",
+                                                    cursor: (isSavingPreferences || !hasPreferencesChanges) ? "not-allowed" : "pointer",
+                                                    opacity: (!hasPreferencesChanges && !isSavingPreferences) ? 0.6 : 1
+                                                }}>
+                                                    {isSavingPreferences ? "Salvando..." : t("profile.saveChanges")}
+                                                </button>
                                             </div>
                                         </div>
                                     )}
@@ -680,3 +859,5 @@ export default function ProfilePage() {
         </div>
     );
 }
+
+

@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { GraduationCap, Bell, MoreVertical, X, LayoutGrid, Map, User as UserIcon, Sun, Moon, LogOut, Play } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -19,6 +20,7 @@ export default function StudentLayout({
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const { user, logout } = useAuth();
+    const { t } = useLanguage();
     const { resolvedTheme, setTheme } = useTheme();
     const pathname = usePathname();
     const isDark = mounted && resolvedTheme === "dark";
@@ -49,9 +51,9 @@ export default function StudentLayout({
     };
 
     const studentLinks = [
-        { href: "/catalog", label: "Cursos", icon: LayoutGrid },
-        { href: "/trails", label: "Trilhas", icon: Map },
-        { href: "/profile", label: "Meu Perfil", icon: UserIcon },
+        { href: "/catalog", label: t("nav.courses"), icon: LayoutGrid },
+        { href: "/trails", label: t("nav.trails"), icon: Map },
+        { href: "/profile", label: t("nav.profile"), icon: UserIcon },
     ];
 
     const sidebarWidth = isCollapsed ? "80px" : "280px";
@@ -193,7 +195,7 @@ export default function StudentLayout({
                             gap: "8px"
                         }}>
                             <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: colors.accent, boxShadow: "0 0 10px #3b82f6" }} />
-                            Portal do Aluno
+                            {t("nav.studentPortal")}
                         </div>
                     )}
 
@@ -240,7 +242,7 @@ export default function StudentLayout({
                                 cursor: "pointer"
                             }}
                         >
-                            <span style={{ fontSize: "13px", fontWeight: 700, color: colors.textMuted }}>Olá, {user?.name?.split(' ')[0]}</span>
+                            <span style={{ fontSize: "13px", fontWeight: 700, color: colors.textMuted }}>{t("nav.hello", { name: user?.name?.split(' ')[0] || "" })}</span>
                             <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: `linear-gradient(135deg, ${colors.accent}, #7c3aed)`, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.2)", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }}>
                                 <span style={{ fontSize: "14px", fontWeight: 900, color: "white" }}>{user?.name?.charAt(0)}</span>
                             </div>
@@ -333,7 +335,7 @@ export default function StudentLayout({
                             }}
                         >
                             {isDark ? <Sun size={24} /> : <Moon size={24} />}
-                            <span>{isDark ? "Modo Claro" : "Modo Escuro"}</span>
+                            <span>{isDark ? t("nav.lightMode") : t("nav.darkMode")}</span>
                         </button>
 
                         <button
@@ -354,7 +356,7 @@ export default function StudentLayout({
                             }}
                         >
                             <LogOut size={24} />
-                            <span>Sair da Conta</span>
+                            <span>{t("nav.logout")}</span>
                         </button>
                     </div>
                 </div>

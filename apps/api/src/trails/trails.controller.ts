@@ -52,6 +52,11 @@ export class TrailsController {
         return this.trailsService.remove(id);
     }
 
+    @Get(':id/progress')
+    getProgress(@CurrentUser() user: any, @Param('id') id: string) {
+        return this.trailsService.getProgress(id, user.id);
+    }
+
     @UseGuards(RolesGuard)
     @Roles(Role.CREATOR)
     @Post(':id/courses')

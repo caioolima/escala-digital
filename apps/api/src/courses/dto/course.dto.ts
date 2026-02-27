@@ -30,6 +30,10 @@ export class CreateCourseDto {
     @IsString()
     @IsOptional()
     level?: string;
+
+    @IsBoolean()
+    @IsOptional()
+    published?: boolean;
 }
 
 export class UpdateCourseDto {

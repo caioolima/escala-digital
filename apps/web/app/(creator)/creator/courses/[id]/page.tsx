@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
 
 interface Attachment {
     id: string;
@@ -86,25 +87,61 @@ export default function CourseViewPage() {
     };
 
     useEffect(() => {
-        // Try course_<id> key first (full data), then fallback to creator_published_courses list
-        const raw = localStorage.getItem(`course_${courseId}`);
-        if (raw) {
-            const data: Course = JSON.parse(raw);
-            setCourse(data);
-            // Expand all modules and set first lesson as active by default
-            const expanded: Record<string, boolean> = {};
-            data.modules.forEach(m => { expanded[m.id] = true; });
-            setExpandedModules(expanded);
-            if (data.modules[0]?.lessons[0]) {
-                setActiveLesson(data.modules[0].lessons[0]);
+        const fetchCourse = async () => {
+            setIsLoading(true);
+            try {
+                const [courseResp, lessonsResp] = await Promise.all([
+                    api.get(`/courses/${courseId}`),
+                    api.get(`/courses/${courseId}/lessons`).catch(() => ({ data: [] })),
+                ]);
+
+                const apiCourse = courseResp.data || {};
+                const lessons = (lessonsResp.data || []).map((l: any) => ({
+                    id: l.id,
+                    title: l.title,
+                    videoUrl: l.videoUrl,
+                    attachments: [],
+                })) as Lesson[];
+
+                const modules: Module[] = (apiCourse.modules && apiCourse.modules.length > 0)
+                    ? apiCourse.modules.map((m: any) => ({
+                        id: m.id,
+                        title: m.title,
+                        lessons: (m.lessons || []).map((l: any) => ({
+                            id: l.id,
+                            title: l.title,
+                            videoUrl: l.videoUrl || "",
+                            attachments: [],
+                        })),
+                    }))
+                    : [{ id: "default", title: "Conteúdo", lessons }];
+
+                const mapped: Course = {
+                    id: apiCourse.id,
+                    title: apiCourse.title,
+                    description: apiCourse.description || "",
+                    level: apiCourse.level || "Iniciante",
+                    status: apiCourse.published ? "published" : "draft",
+                    students: apiCourse.studentsCount ?? apiCourse._count?.enrollments ?? 0,
+                    lastUpdated: apiCourse.updatedAt ? new Date(apiCourse.updatedAt).toLocaleDateString("pt-BR") : "—",
+                    category: apiCourse.category || "Geral",
+                    thumbnail: apiCourse.thumbnail || "",
+                    modules,
+                };
+
+                setCourse(mapped);
+                const expanded: Record<string, boolean> = {};
+                mapped.modules.forEach((m) => { expanded[m.id] = true; });
+                setExpandedModules(expanded);
+                setActiveLesson(mapped.modules[0]?.lessons[0] || null);
+            } catch (e) {
+                console.error("Failed to fetch creator course", e);
+                setCourse(null);
+            } finally {
+                setIsLoading(false);
             }
-        } else {
-            // Fallback: search in the list
-            const list = JSON.parse(localStorage.getItem("creator_published_courses") || "[]");
-            const found = list.find((c: Course) => c.id === courseId);
-            if (found) setCourse(found);
-        }
-        setTimeout(() => setIsLoading(false), 500);
+        };
+        fetchCourse();
     }, [courseId]);
 
     const toggleModule = (moduleId: string) => {
@@ -302,3 +339,5 @@ export default function CourseViewPage() {
         </div>
     );
 }
+
+
