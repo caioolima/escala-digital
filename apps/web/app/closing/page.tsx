@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { GraduationCap, LogOut, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -9,9 +9,14 @@ const CLOSING_DELAY_MS = 1800;
 
 export default function ClosingPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { resolvedTheme, setTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
     const isDark = resolvedTheme === "dark";
+    const role = searchParams.get("role");
+    const isCreator = role === "CREATOR";
+    const brandPrimary = isCreator ? "#9146FF" : "#3b82f6";
+    const brandSecondary = isCreator ? "#772CE8" : "#2563eb";
 
     useEffect(() => {
         setMounted(true);
@@ -114,11 +119,11 @@ export default function ClosingPage() {
                                 width: "40px",
                                 height: "40px",
                                 borderRadius: "12px",
-                                background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+                                background: `linear-gradient(135deg, ${brandPrimary} 0%, ${brandSecondary} 100%)`,
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                boxShadow: "0 8px 16px rgba(59, 130, 246, 0.4)",
+                                boxShadow: isCreator ? "0 8px 16px rgba(145, 70, 255, 0.4)" : "0 8px 16px rgba(59, 130, 246, 0.4)",
                                 position: "relative",
                                 overflow: "hidden"
                             }}>
@@ -132,13 +137,13 @@ export default function ClosingPage() {
                             </div>
                             <div style={{ display: "flex", alignItems: "baseline" }}>
                                 <span style={{ fontWeight: 600, fontSize: "20px", color: isDark ? "white" : "#0f172a", letterSpacing: "-0.5px" }}>Escala</span>
-                                <span style={{ fontWeight: 900, fontSize: "20px", color: "#3b82f6", letterSpacing: "-0.5px" }}>Digital</span>
+                                <span style={{ fontWeight: 900, fontSize: "20px", color: brandPrimary, letterSpacing: "-0.5px" }}>Digital</span>
                             </div>
                         </div>
 
                         <div>
                             <h1 style={{ fontSize: "56px", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-2px", margin: "0 0 22px", color: isDark ? "white" : "#0f172a" }}>
-                                Sessão<br />encerrada com <span style={{ background: "linear-gradient(90deg,#f87171,#fb7185)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>sucesso</span>
+                                Sessão<br />encerrada com <span style={{ background: isCreator ? "linear-gradient(90deg,#a78bfa,#c4b5fd)" : "linear-gradient(90deg,#f87171,#fb7185)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>sucesso</span>
                             </h1>
                             <p style={{ color: isDark ? "rgba(255,255,255,0.45)" : "#64748b", fontSize: "19px", lineHeight: 1.7, margin: 0, maxWidth: "620px" }}>
                                 Seu acesso foi encerrado neste dispositivo. Em instantes você será redirecionado para fazer login novamente.
@@ -165,11 +170,11 @@ export default function ClosingPage() {
                                 width: "64px",
                                 height: "64px",
                                 borderRadius: "16px",
-                                background: "linear-gradient(135deg, #ef4444 0%, #f43f5e 100%)",
+                                background: isCreator ? `linear-gradient(135deg, ${brandPrimary} 0%, ${brandSecondary} 100%)` : "linear-gradient(135deg, #ef4444 0%, #f43f5e 100%)",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                boxShadow: "0 16px 30px rgba(239,68,68,0.35)",
+                                boxShadow: isCreator ? "0 16px 30px rgba(145,70,255,0.35)" : "0 16px 30px rgba(239,68,68,0.35)",
                             }}>
                                 <LogOut size={30} color="white" />
                             </div>
@@ -192,7 +197,7 @@ export default function ClosingPage() {
                                 <div style={{
                                     width: "40%",
                                     height: "100%",
-                                    background: "linear-gradient(90deg, #ef4444, #f43f5e)",
+                                    background: isCreator ? `linear-gradient(90deg, ${brandPrimary}, ${brandSecondary})` : "linear-gradient(90deg, #ef4444, #f43f5e)",
                                     animation: "loading 1.1s ease-in-out infinite",
                                 }} />
                             </div>

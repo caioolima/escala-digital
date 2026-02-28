@@ -56,6 +56,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 const TRUSTED_DEVICE_KEY = "trusted_device_id";
+const LOGIN_TRANSITION_DELAY_MS = 700;
 
 function getTrustedDeviceContext(): TrustedDeviceContext {
     let deviceId = localStorage.getItem(TRUSTED_DEVICE_KEY);
@@ -109,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throw new Error(`RESTRICTED_ROLE:${userData.role}`);
         }
 
+        await new Promise((resolve) => setTimeout(resolve, LOGIN_TRANSITION_DELAY_MS));
         const nextPath = userData.role === "CREATOR" ? "/creator/dashboard" : "/catalog";
         router.push(`/opening?next=${encodeURIComponent(nextPath)}`);
     };
@@ -153,9 +155,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logout = () => {
+        const role = user?.role;
         localStorage.removeItem("access_token");
         setUser(null);
-        router.push("/closing");
+        const query = role ? `?role=${encodeURIComponent(role)}` : "";
+        router.push(`/closing${query}`);
     };
 
     const updateProfile = async (data: { name?: string; email?: string; avatarUrl?: string }) => {
