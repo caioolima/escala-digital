@@ -123,7 +123,13 @@ export default function CatalogPage() {
         };
     }, []);
 
-    if (!mounted) return null;
+    if (!mounted) {
+        return (
+            <div style={{ background: "var(--brand-bg)", minHeight: "100%", color: "var(--brand-text)", padding: isMobile ? "0 20px 80px" : "0 clamp(20px,5vw,60px) 100px" }}>
+                <CatalogSkeleton isMobile={false} />
+            </div>
+        );
+    }
 
     const featured = courses[0];
 

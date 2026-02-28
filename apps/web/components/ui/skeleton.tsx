@@ -1,8 +1,5 @@
 "use client";
 
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
-
 interface SkeletonProps {
     width?: string | number;
     height?: string | number;
@@ -18,22 +15,12 @@ export function Skeleton({
     className = "",
     style
 }: SkeletonProps) {
-    const { resolvedTheme } = useTheme();
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    const isDark = mounted && resolvedTheme === "dark";
-
     const baseStyle: React.CSSProperties = {
         width: width || "100%",
         height: height || "20px",
         borderRadius: borderRadius,
-        backgroundImage: isDark
-            ? "linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%)"
-            : "linear-gradient(90deg, rgba(0,0,0,0.03) 25%, rgba(0,0,0,0.06) 50%, rgba(0,0,0,0.03) 75%)",
+        backgroundImage:
+            "linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%)",
         backgroundSize: "200% 100%",
         animation: "skeleton-shimmer 1.5s infinite linear",
         ...style
@@ -42,6 +29,14 @@ export function Skeleton({
     return (
         <div className={`skeleton ${className}`} style={baseStyle}>
             <style jsx>{`
+                :global(:root) {
+                    --skeleton-base: rgba(0, 0, 0, 0.04);
+                    --skeleton-highlight: rgba(0, 0, 0, 0.08);
+                }
+                :global(html.dark), :global(body.dark), :global([data-theme="dark"]) {
+                    --skeleton-base: rgba(255, 255, 255, 0.05);
+                    --skeleton-highlight: rgba(255, 255, 255, 0.10);
+                }
                 @keyframes skeleton-shimmer {
                     0% { background-position: 200% 0; }
                     100% { background-position: -200% 0; }

@@ -48,13 +48,64 @@ function TrailsCatalogSkeleton({ isMobile }: { isMobile: boolean }) {
             marginTop: "20px"
         }}>
             {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div
+                    key={i}
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "14px",
+                        padding: 0
+                    }}
+                >
                     <Skeleton width="100%" height={200} borderRadius="20px" />
-                    <Skeleton width="70%" height={24} />
-                    <Skeleton width="100%" height={60} />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                        <Skeleton width={120} height={16} borderRadius={999} />
+                        <Skeleton width={52} height={16} borderRadius={999} />
+                    </div>
+                    <Skeleton width="72%" height={24} borderRadius={12} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <Skeleton width="100%" height={14} borderRadius={10} />
+                        <Skeleton width="86%" height={14} borderRadius={10} />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
+                        <Skeleton width={110} height={14} borderRadius={10} />
+                        <Skeleton width={44} height={14} borderRadius={10} />
+                    </div>
+                    <Skeleton width="100%" height={8} borderRadius={999} />
                 </div>
             ))}
         </div>
+    );
+}
+
+function TrailsHeaderSkeleton({ isMobile }: { isMobile: boolean }) {
+    return (
+        <header style={{ padding: isMobile ? '24px 20px' : '40px clamp(20px,5vw,60px)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Skeleton width={24} height={24} borderRadius={8} />
+                <Skeleton width={140} height={12} borderRadius={999} />
+            </div>
+            <Skeleton width={isMobile ? "60%" : 380} height={44} borderRadius={14} />
+            <Skeleton width={isMobile ? "90%" : 560} height={18} borderRadius={10} />
+            <Skeleton width={isMobile ? "80%" : 520} height={18} borderRadius={10} />
+
+            <div style={{
+                position: "relative",
+                zIndex: 100,
+                display: "flex",
+                flexDirection: isMobile ? "column" : "row",
+                alignItems: isMobile ? "stretch" : "center",
+                gap: isMobile ? "12px" : "16px",
+                width: "100%",
+                maxWidth: "1000px",
+            }}>
+                <Skeleton width="100%" height={64} borderRadius={24} />
+                <div style={{ width: isMobile ? "100%" : 340, display: "flex", gap: 10 }}>
+                    <Skeleton height={44} borderRadius={14} style={{ flex: 1 }} />
+                    <Skeleton height={44} borderRadius={14} style={{ flex: 1 }} />
+                </div>
+            </div>
+        </header>
     );
 }
 
@@ -148,7 +199,16 @@ export default function TrailsCatalogPage() {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    if (!mounted) return null;
+    if (!mounted) {
+        return (
+            <div style={{ background: "var(--brand-bg)", minHeight: "100%", color: "var(--brand-text)" }}>
+                <TrailsHeaderSkeleton isMobile={false} />
+                <main style={{ padding: "0 clamp(20px,5vw,60px) 100px", flex: 1 }}>
+                    <TrailsCatalogSkeleton isMobile={false} />
+                </main>
+            </div>
+        );
+    }
 
     const colors = {
         bg: 'var(--brand-bg)',
@@ -175,6 +235,9 @@ export default function TrailsCatalogPage() {
                 .trail-card:hover .cover-overlay { opacity: 1 !important; }
             `}</style>
 
+            {isLoading ? (
+                <TrailsHeaderSkeleton isMobile={isMobile} />
+            ) : (
             <header style={{ padding: isMobile ? '24px 20px' : '40px clamp(20px,5vw,60px)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: colors.accent, marginBottom: '8px' }}>
                     <Map size={24} strokeWidth={2.5} />
@@ -296,6 +359,7 @@ export default function TrailsCatalogPage() {
                 </div>
                 </div>
             </header>
+            )}
 
             <main style={{ padding: isMobile ? '0 20px 80px' : '0 clamp(20px,5vw,60px) 100px', flex: 1 }}>
                 {isLoading ? (
@@ -320,7 +384,7 @@ export default function TrailsCatalogPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px,1fr))', gap: 35, marginTop: 20 }}>
                         {filteredTrails.map((trail) => (
                             <div key={trail.id} className="trail-card" onClick={() => router.push(`/trails/${trail.id}`)} style={{ background: colors.cardBg, borderRadius: 24, overflow: 'hidden', border: `1px solid ${colors.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#f1f5f9' }}>
+                                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }}>
                                     <Image src={trail.cover || ''} alt={trail.title || 'trail cover'} style={{ objectFit: 'cover' }} fill sizes="(max-width: 768px) 100vw, 33vw" />
                                     <div className="cover-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.3s ease' }}>
                                         <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>

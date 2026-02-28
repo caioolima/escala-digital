@@ -175,6 +175,8 @@ export default function CreatorCoursesPage() {
         c.title.toLowerCase().includes(search.toLowerCase()) ||
         c.category?.toLowerCase().includes(search.toLowerCase())
     );
+    const publishedCount = allCourses.filter(c => c.status === "published").length;
+    const draftCount = allCourses.length - publishedCount;
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const safePage = Math.min(page, totalPages);
     const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -203,7 +205,10 @@ export default function CreatorCoursesPage() {
                         </div>
                         <h1 style={{ fontSize: "32px", fontWeight: 900, color: colors.text, letterSpacing: "-1.5px", margin: 0 }}>Seus Cursos</h1>
                         <p style={{ fontSize: "14px", color: colors.textMuted, fontWeight: 500, marginTop: "6px" }}>
-                            {allCourses.length} {allCourses.length === 1 ? "curso" : "cursos"} no total
+                            {allCourses.length} {allCourses.length === 1 ? "curso" : "cursos"} no total &nbsp;·&nbsp; {publishedCount} publicado{publishedCount === 1 ? "" : "s"} &nbsp;·&nbsp; {draftCount} rascunho{draftCount === 1 ? "" : "s"}
+                            <span style={{ display: "block", marginTop: "6px" }}>
+                                Crie, edite e publique seus cursos. Acompanhe alunos e atualizações em um só lugar.
+                            </span>
                         </p>
                     </div>
                     <Button asChild style={{ background: colors.accent, borderRadius: "14px", height: "50px", padding: "0 24px", fontWeight: 800, fontSize: "14px", boxShadow: "0 8px 24px rgba(145,70,255,0.35)" }}>
@@ -219,7 +224,7 @@ export default function CreatorCoursesPage() {
                     <input
                         value={search}
                         onChange={e => { setSearch(e.target.value); setPage(1); }}
-                        placeholder="Buscar cursos..."
+                        placeholder="Buscar por nome ou categoria..."
                         style={{ width: "100%", height: "44px", padding: "0 16px 0 44px", borderRadius: "14px", background: colors.card, border: `1px solid ${colors.border}`, color: colors.text, fontSize: "14px", fontWeight: 500, outline: "none" }}
                     />
                 </div>

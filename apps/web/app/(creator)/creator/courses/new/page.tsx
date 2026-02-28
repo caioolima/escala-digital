@@ -22,6 +22,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast, ToastContainer } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
+
+function NewCourseSkeleton() {
+    return (
+        <div style={{ background: "var(--brand-bg)", minHeight: "100%", padding: "40px" }}>
+            <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "32px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <Skeleton width={160} height={14} borderRadius={10} />
+                        <Skeleton width={360} height={40} borderRadius={14} />
+                    </div>
+                    <Skeleton width={180} height={52} borderRadius={14} />
+                </div>
+                <Skeleton width="100%" height={64} borderRadius={18} />
+                <Skeleton width="100%" height={520} borderRadius={22} />
+            </div>
+        </div>
+    );
+}
 
 export default function NewCoursePage() {
     const router = useRouter();
@@ -61,7 +80,7 @@ export default function NewCoursePage() {
         setMounted(true);
     }, []);
 
-    if (!mounted) return null;
+    if (!mounted) return <NewCourseSkeleton />;
 
     const colors = {
         bg: "var(--brand-bg)",
@@ -593,7 +612,7 @@ export default function NewCoursePage() {
                             </Button>
                         </div>
                     </div>
-                )}\r
+                )}
             </div>
 
             <ToastContainer toasts={toasts} onRemove={remove} />

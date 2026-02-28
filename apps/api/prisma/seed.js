@@ -7,12 +7,15 @@ const prisma = new PrismaClient();
 async function main() {
     console.log('🌱 Starting seeding (Clean CommonJS)...');
 
-    // 1. Create a default company
+    // 1. Create a default company (SaaS demo tenant)
     const company = await prisma.company.upsert({
         where: { slug: 'escala-digital' },
-        update: {},
+        update: {
+            name: 'Companhia Demo',
+            logoUrl: 'https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070&auto=format&fit=crop',
+        },
         create: {
-            name: 'Escala Digital',
+            name: 'Companhia Demo',
             slug: 'escala-digital',
             logoUrl: 'https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070&auto=format&fit=crop',
         },

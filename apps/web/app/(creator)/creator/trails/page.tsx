@@ -366,7 +366,10 @@ export default function CreatorTrailsPage() {
                         </div>
                         <h1 style={{ fontSize: isMobile ? "28px" : "40px", fontWeight: 900, color: colors.text, letterSpacing: "-1.5px", margin: 0 }}>Gestão de Trilhas</h1>
                         <p style={{ fontSize: "14px", color: colors.textMuted, marginTop: "8px", fontWeight: 500 }}>
-                            {trails.length} {trails.length === 1 ? "Jornada Ativa" : "Jornadas Ativas"} no catálogo
+                            {trails.length} {trails.length === 1 ? "jornada ativa" : "jornadas ativas"} no catálogo
+                            <span style={{ display: "block", marginTop: "6px" }}>
+                                Organize seus cursos em sequências claras. Clique em uma trilha para visualizar, editar ou excluir.
+                            </span>
                         </p>
                     </div>
                     <Button onClick={openPanel} style={{

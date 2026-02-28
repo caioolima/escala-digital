@@ -131,7 +131,17 @@ export default function LessonViewPage() {
         };
     }, [courseId, lessonId]);
 
-    if (!mounted) return null;
+    if (!mounted) {
+        return (
+            <div style={{ background: "var(--brand-bg)", minHeight: "100%" }}>
+                <div style={{ padding: "40px", display: "flex", flexDirection: "column", gap: "24px" }}>
+                    <Skeleton height={600} borderRadius="32px" />
+                    <Skeleton width="60%" height={32} />
+                    <Skeleton width="40%" height={20} />
+                </div>
+            </div>
+        );
+    }
 
     const colors = {
         bg: "var(--brand-bg)",

@@ -155,7 +155,13 @@ export default function CourseDetailsPage() {
         }
     };
 
-    if (!mounted) return null;
+    if (!mounted) {
+        return (
+            <div style={{ background: "var(--brand-bg)", minHeight: "100%" }}>
+                <DetailsSkeleton />
+            </div>
+        );
+    }
     if (isLoading) return <DetailsSkeleton />;
 
     if (!course) {

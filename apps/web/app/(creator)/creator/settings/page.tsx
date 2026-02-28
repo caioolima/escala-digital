@@ -7,17 +7,64 @@ import {
     Shield,
     Bell,
     Palette,
-    Globe,
     Check,
     ChevronRight,
     Camera,
-    CreditCard
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+
+function CreatorSettingsSkeleton() {
+    return (
+        <div style={{ background: "var(--brand-bg)", minHeight: "100%", padding: "40px 24px" }}>
+            <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <Skeleton width={18} height={18} borderRadius={6} />
+                        <Skeleton width={200} height={12} borderRadius={999} />
+                    </div>
+                    <Skeleton width={260} height={40} borderRadius={14} />
+                    <Skeleton width={560} height={16} borderRadius={10} />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 28, alignItems: "start" }}>
+                    <div style={{ borderRadius: 22, border: "1px solid var(--brand-border)", background: "var(--brand-card)", overflow: "hidden" }}>
+                        <div style={{ padding: 18, borderBottom: "1px solid var(--brand-border)", display: "flex", flexDirection: "column", gap: 10 }}>
+                            <Skeleton width={180} height={16} borderRadius={10} />
+                            <Skeleton width={140} height={12} borderRadius={10} />
+                        </div>
+                        <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <Skeleton key={i} height={48} borderRadius={16} />
+                            ))}
+                        </div>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                        <div style={{ borderRadius: 22, border: "1px solid var(--brand-border)", background: "var(--brand-card)" }}>
+                            <div style={{ padding: 18, borderBottom: "1px solid var(--brand-border)" }}>
+                                <Skeleton width={220} height={18} borderRadius={10} />
+                            </div>
+                            <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+                                <Skeleton width={140} height={12} borderRadius={10} />
+                                <Skeleton height={48} borderRadius={12} />
+                                <Skeleton width={140} height={12} borderRadius={10} style={{ marginTop: 8 }} />
+                                <Skeleton height={48} borderRadius={12} />
+                            </div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
+                            <Skeleton width={160} height={44} borderRadius={14} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function CreatorSettingsPage() {
     const { resolvedTheme } = useTheme();
@@ -25,6 +72,7 @@ export default function CreatorSettingsPage() {
     const { user, updateProfile, getSettings, updateSettings, changePassword } = useAuth();
     const { toast } = useToast();
     const [mounted, setMounted] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("profile");
     const [isSaving, setIsSaving] = useState(false);
 
@@ -34,8 +82,6 @@ export default function CreatorSettingsPage() {
     // Settings States
     const [profile, setProfile] = useState({
         name: user?.name || "Criador",
-        bio: "",
-        avatar: ""
     });
 
     const [platform, setPlatform] = useState({
@@ -56,13 +102,12 @@ export default function CreatorSettingsPage() {
     useEffect(() => {
         setMounted(true);
         const load = async () => {
+            setIsLoading(true);
             try {
                 const settings = await getSettings?.();
                 const prefs = settings?.preferences || {};
                 const nextProfile = {
                     name: user?.name || "Criador",
-                    bio: prefs.bio || "",
-                    avatar: prefs.avatar || "",
                 };
                 const nextPlatform = { logo: prefs.platform?.logo || "" };
                 const nextNotifications = {
@@ -82,18 +127,21 @@ export default function CreatorSettingsPage() {
             } catch (e) {
                 console.error("Failed to load creator settings", e);
                 const defaults = {
-                    profile: { name: user?.name || "Criador", bio: "", avatar: "" },
+                    profile: { name: user?.name || "Criador" },
                     platform: { logo: "" },
                     notifications: { newEnrollments: true, performanceReports: true },
                     security: { enable2FA: false },
                 };
                 setInitialSettings(defaults);
+            } finally {
+                setIsLoading(false);
             }
         };
         void load();
     }, [user]);
 
-    if (!mounted) return null;
+    if (!mounted) return <CreatorSettingsSkeleton />;
+    if (isLoading || !initialSettings) return <CreatorSettingsSkeleton />;
 
     const handleSave = () => {
         const save = async () => {
@@ -101,16 +149,16 @@ export default function CreatorSettingsPage() {
             try {
                 if (activeTab === "profile") {
                     await updateProfile?.({ name: profile.name });
-                    await updateSettings?.({ preferences: { bio: profile.bio, avatar: profile.avatar, platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
+                    await updateSettings?.({ preferences: { platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
                 } else if (activeTab === "platform") {
-                    await updateSettings?.({ preferences: { bio: profile.bio, avatar: profile.avatar, platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
+                    await updateSettings?.({ preferences: { platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
                 } else if (activeTab === "notifications") {
                     await updateSettings?.({ notifications });
                 } else if (activeTab === "security") {
                     if (security.currentPassword && security.newPassword) {
                         await changePassword?.(security.currentPassword, security.newPassword);
                     }
-                    await updateSettings?.({ preferences: { bio: profile.bio, avatar: profile.avatar, platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
+                    await updateSettings?.({ preferences: { platform: { logo: platform.logo }, enable2FA: security.enable2FA } });
                     setSecurity((prev) => ({ ...prev, currentPassword: "", newPassword: "" }));
                 }
 
@@ -159,57 +207,101 @@ export default function CreatorSettingsPage() {
         { id: "profile", label: "Perfil do Criador", icon: User },
         { id: "platform", label: "Customização da Plataforma", icon: Palette },
         { id: "security", label: "Segurança & Acesso", icon: Shield },
-        { id: "billing", label: "Pagamentos & Planos", icon: CreditCard },
         { id: "notifications", label: "Notificações", icon: Bell },
     ];
 
     return (
-        <div style={{ background: colors.bg, minHeight: "100%", padding: "40px" }}>
-            <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "40px" }}>
+        <div style={{ background: colors.bg, minHeight: "100%", padding: "40px 24px" }}>
+            <style>{`
+                .settings-shell { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+                .settings-grid { display: grid; grid-template-columns: 320px 1fr; gap: 28px; align-items: start; }
+                @media (max-width: 980px) { .settings-grid { grid-template-columns: 1fr; } }
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+                .settings-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+                .settings-kicker { display: inline-flex; align-items: center; gap: 8px; color: #9146FF; margin-bottom: 8px; }
+                .settings-title { font-size: 36px; font-weight: 900; color: var(--brand-text); letter-spacing: -1.5px; margin: 0; }
+                .settings-sub { font-size: 14px; color: var(--brand-text-muted); font-weight: 500; margin-top: 8px; max-width: 560px; line-height: 1.6; }
+
+                .nav-card { border-radius: 22px; border: 1px solid var(--brand-border); background: var(--brand-card); overflow: hidden; }
+                .nav-top { padding: 18px 18px 14px; border-bottom: 1px solid var(--brand-border); display: flex; flex-direction: column; gap: 10px; }
+                .nav-meta { display: flex; flex-direction: column; gap: 2px; }
+                .nav-name { font-size: 14px; font-weight: 900; color: var(--brand-text); margin: 0; }
+                .nav-company { font-size: 12px; font-weight: 700; color: var(--brand-text-muted); margin: 0; }
+
+                .nav-list { padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+                .nav-btn {
+                    display: flex; align-items: center; gap: 12px;
+                    padding: 14px 14px;
+                    border-radius: 16px;
+                    background: transparent;
+                    border: 1px solid transparent;
+                    color: var(--brand-text-muted);
+                    font-size: 14px;
+                    font-weight: 800;
+                    text-align: left;
+                    cursor: pointer;
+                    transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease;
+                }
+                .nav-btn:hover { transform: translateY(-1px); border-color: var(--brand-border); background: rgba(145,70,255,0.06); }
+                .nav-btn.active { background: rgba(145, 70, 255, 0.10); border-color: rgba(145,70,255,0.25); color: #9146FF; }
+
+                .content-col { display: flex; flex-direction: column; gap: 18px; }
+
+                .field-label { font-size: 11px; font-weight: 900; color: var(--brand-text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; display: block; }
+                .field-input {
+                    width: 100%; height: 48px; padding: 0 16px; border-radius: 12px;
+                    background: ${isDark ? "rgba(255,255,255,0.03)" : "#f8fafc"};
+                    border: 1px solid var(--brand-border);
+                    color: var(--brand-text);
+                    font-size: 14px;
+                    font-weight: 600;
+                    outline: none;
+                }
+            `}</style>
+
+            <div className="settings-shell">
+
+                <div className="settings-header">
                     <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#9146FF", marginBottom: "8px" }}>
+                        <div className="settings-kicker">
                             <Settings size={18} />
                             <span style={{ fontSize: "12px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1.5px" }}>Configurações do Sistema</span>
                         </div>
-                        <h1 style={{ fontSize: "36px", fontWeight: 900, color: colors.text, letterSpacing: "-1.5px" }}>Configurações</h1>
+                        <h1 className="settings-title">Configurações</h1>
+                        <p className="settings-sub">
+                            Ajuste perfil, notificações e segurança. Estas alterações se aplicam à sua conta e à experiência da sua companhia.
+                        </p>
                     </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "40px" }}>
+                <div className="settings-grid">
                     {/* Navigation Sidebar */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        {sections.map((section) => {
-                            const active = activeTab === section.id;
-                            return (
-                                <button
-                                    key={section.id}
-                                    onClick={() => setActiveTab(section.id)}
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "12px",
-                                        padding: "16px",
-                                        borderRadius: "16px",
-                                        background: active ? (isDark ? "rgba(145, 70, 255, 0.1)" : "#f5f3ff") : "transparent",
-                                        border: "none",
-                                        color: active ? "#9146FF" : colors.textMuted,
-                                        fontSize: "14px",
-                                        fontWeight: 800,
-                                        textAlign: "left",
-                                        cursor: "pointer",
-                                        transition: "all 0.2s ease"
-                                    }}>
-                                    <section.icon size={18} strokeWidth={active ? 2.5 : 2} />
-                                    {section.label}
-                                </button>
-                            );
-                        })}
+                    <div className="nav-card">
+                        <div className="nav-top">
+                            <div className="nav-meta">
+                                <p className="nav-name">{user?.name || "Criador"}</p>
+                                <p className="nav-company">{user?.company || "Companhia"}</p>
+                            </div>
+                        </div>
+                        <div className="nav-list">
+                            {sections.map((section) => {
+                                const active = activeTab === section.id;
+                                return (
+                                    <button
+                                        key={section.id}
+                                        onClick={() => setActiveTab(section.id)}
+                                        className={"nav-btn" + (active ? " active" : "")}
+                                    >
+                                        <section.icon size={18} strokeWidth={active ? 2.5 : 2} />
+                                        {section.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     {/* Main Settings Content */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                    <div className="content-col">
                         {activeTab === "profile" && (
                             <Card style={{ borderRadius: "24px", border: `1px solid ${colors.border}`, background: colors.card, overflow: "hidden" }}>
                                 <CardHeader style={{ padding: "32px 32px 0" }}>
@@ -224,27 +316,31 @@ export default function CreatorSettingsPage() {
                                             position: "relative", border: `1px solid ${colors.border}`
                                         }}>
                                             <User size={32} color={colors.textMuted} />
-                                            <button style={{ position: "absolute", bottom: "-4px", right: "-4px", width: "32px", height: "32px", borderRadius: "10px", background: "#9146FF", color: "white", border: "4px solid " + colors.card, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                            <button
+                                                disabled
+                                                title="Upload de avatar (em breve)"
+                                                style={{ position: "absolute", bottom: "-4px", right: "-4px", width: "32px", height: "32px", borderRadius: "10px", background: "#9146FF", color: "white", border: "4px solid " + colors.card, cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.6 }}
+                                            >
                                                 <Camera size={14} />
                                             </button>
                                         </div>
                                         <div style={{ flex: 1 }}>
-                                            <label style={{ fontSize: "11px", fontWeight: 900, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px", display: "block" }}>Nome do Criador</label>
+                                            <label className="field-label">Nome do Criador</label>
                                             <input
                                                 value={profile.name}
                                                 onChange={e => setProfile({ ...profile, name: e.target.value })}
-                                                style={{ width: "100%", height: "48px", padding: "0 16px", borderRadius: "12px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text, fontSize: "14px", fontWeight: 600, outline: "none" }}
+                                                className="field-input"
                                             />
                                         </div>
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: "11px", fontWeight: 900, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px", display: "block" }}>Bio do Perfil</label>
-                                        <textarea
-                                            value={profile.bio}
-                                            onChange={e => setProfile({ ...profile, bio: e.target.value })}
-                                            placeholder="Conte um pouco sobre sua experiência..."
-                                            style={{ width: "100%", height: "120px", padding: "16px", borderRadius: "12px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text, fontSize: "14px", fontWeight: 500, resize: "none", outline: "none" }}
-                                        />
+                                        <label className="field-label">Companhia</label>
+                                        <div style={{ width: "100%", minHeight: "48px", padding: "12px 16px", borderRadius: "12px", background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc", border: `1px solid ${colors.border}`, color: colors.text, fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "center" }}>
+                                            {user?.company || "—"}
+                                        </div>
+                                        <p style={{ margin: "8px 0 0", fontSize: "12px", color: colors.textMuted, fontWeight: 600 }}>
+                                            O avatar vai aparecer aqui assim que o upload de imagem estiver pronto.
+                                        </p>
                                     </div>
                                     <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "24px", marginTop: "8px", borderTop: `1px solid ${colors.border}` }}>
                                         <Button
@@ -344,50 +440,6 @@ export default function CreatorSettingsPage() {
                                             style={{ background: "#9146FF", borderRadius: "10px", height: "40px", padding: "0 20px", fontWeight: 700, fontSize: "13px", opacity: (!hasChanges("security") && !isSaving) ? 0.5 : 1 }}
                                         >
                                             {isSaving ? "Salvando..." : <><Check size={16} className="mr-2" /> Salvar Alterações</>}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {activeTab === "billing" && (
-                            <Card style={{ borderRadius: "24px", border: `1px solid ${colors.border}`, background: colors.card, overflow: "hidden" }}>
-                                <CardHeader style={{ padding: "32px 32px 0" }}>
-                                    <CardTitle style={{ fontSize: "18px", fontWeight: 900 }}>Plano & Faturamento</CardTitle>
-                                </CardHeader>
-                                <CardContent style={{ padding: "32px", display: "flex", flexDirection: "column", gap: "24px" }}>
-                                    <div style={{ padding: "32px", borderRadius: "24px", background: "linear-gradient(135deg, #9146FF, #7030D8)", color: "white", position: "relative", overflow: "hidden" }}>
-                                        <div style={{ position: "relative", zIndex: 1 }}>
-                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
-                                                <div>
-                                                    <span style={{ fontSize: "11px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1px", opacity: 0.8 }}>Plano Atual</span>
-                                                    <h3 style={{ fontSize: "28px", fontWeight: 900, margin: "4px 0" }}>Escala Digital Pro</h3>
-                                                </div>
-                                                <div style={{ padding: "6px 14px", borderRadius: "100px", background: "rgba(255,255,255,0.2)", fontSize: "12px", fontWeight: 800, backdropFilter: "blur(10px)" }}>
-                                                    Ativo
-                                                </div>
-                                            </div>
-                                            <div style={{ display: "flex", gap: "24px" }}>
-                                                <div>
-                                                    <span style={{ fontSize: "11px", fontWeight: 700, opacity: 0.7 }}>Próximo Vencimento</span>
-                                                    <p style={{ fontSize: "14px", fontWeight: 800, margin: 0 }}>12 de Março, 2026</p>
-                                                </div>
-                                                <div>
-                                                    <span style={{ fontSize: "11px", fontWeight: 700, opacity: 0.7 }}>Custo Mensal</span>
-                                                    <p style={{ fontSize: "14px", fontWeight: 800, margin: 0 }}>R$ 497,90</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {/* Decorative circle */}
-                                        <div style={{ position: "absolute", right: "-40px", top: "-40px", width: "160px", height: "160px", borderRadius: "50%", background: "rgba(255,255,255,0.1)" }} />
-                                    </div>
-                                    <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "24px", borderTop: `1px solid ${colors.border}` }}>
-                                        <Button
-                                            onClick={handleSave}
-                                            disabled={true}
-                                            style={{ background: "#9146FF", borderRadius: "10px", height: "40px", padding: "0 20px", fontWeight: 700, fontSize: "13px", opacity: 0.5 }}
-                                        >
-                                            <Check size={16} className="mr-2" /> Salvar Alterações
                                         </Button>
                                     </div>
                                 </CardContent>

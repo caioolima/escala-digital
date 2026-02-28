@@ -18,6 +18,7 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Attachment { id: string; title: string; url: string; }
 interface Lesson { id: string; title: string; videoUrl: string; attachments: Attachment[]; }
@@ -28,6 +29,22 @@ interface CourseData {
     level: string;
     modules: Module[];
     coverUrl?: string;
+}
+
+function EditCourseSkeleton() {
+    return (
+        <div style={{ background: "var(--brand-bg)", minHeight: "100%", padding: "40px" }}>
+            <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "32px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <Skeleton width={180} height={14} borderRadius={10} />
+                    <Skeleton width={360} height={40} borderRadius={14} />
+                </div>
+                <Skeleton width="100%" height={64} borderRadius={18} />
+                <Skeleton width="100%" height={420} borderRadius={22} />
+                <Skeleton width="100%" height={260} borderRadius={22} />
+            </div>
+        </div>
+    );
 }
 
 function getYouTubeThumbnail(url: string): string | null {
@@ -46,6 +63,7 @@ export default function EditCoursePage() {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
     const [mounted, setMounted] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [currentStep, setCurrentStep] = useState(1);
     const [originalStudents, setOriginalStudents] = useState(0);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -66,6 +84,7 @@ export default function EditCoursePage() {
     useEffect(() => {
         setMounted(true);
         const fetchCourse = async () => {
+            setIsLoading(true);
             try {
                 const [courseResp, lessonsResp] = await Promise.all([
                     api.get(`/courses/${courseId}`),
@@ -88,12 +107,15 @@ export default function EditCoursePage() {
                 });
             } catch (e) {
                 console.error("Failed to fetch course for edit", e);
+            } finally {
+                setIsLoading(false);
             }
         };
         fetchCourse();
     }, [courseId]);
 
-    if (!mounted) return null;
+    if (!mounted) return <EditCourseSkeleton />;
+    if (isLoading) return <EditCourseSkeleton />;
 
     const colors = {
         bg: "var(--brand-bg)",

@@ -165,7 +165,13 @@ export default function TrailDetailsPage() {
         };
     }, [trailId]);
 
-    if (!mounted) return null;
+    if (!mounted) {
+        return (
+            <div style={{ background: "var(--brand-bg)", minHeight: "100%", padding: "40px 60px" }}>
+                <TrailSkeleton isMobile={false} />
+            </div>
+        );
+    }
 
     if (!isLoading && !activeTrail) {
         return (

@@ -13,15 +13,18 @@ export default function CreatorLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const [mounted, setMounted] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const { user, logout } = useAuth();
     const { resolvedTheme, setTheme } = useTheme();
     const pathname = usePathname();
-    const isDark = resolvedTheme === "dark";
+    // Avoid hydration mismatch: theme is only reliable after mount.
+    const isDark = mounted && resolvedTheme === "dark";
 
     useEffect(() => {
+        setMounted(true);
         const checkMobile = () => {
             setIsMobile(window.innerWidth < 1024);
         };
@@ -144,8 +147,13 @@ export default function CreatorLayout({
                 .custom-scroll::-webkit-scrollbar { width: 6px; }
                 .custom-scroll::-webkit-scrollbar-track { background: transparent; }
                 .custom-scroll::-webkit-scrollbar-thumb {
-                    background: ${isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"};
+                    background: rgba(0, 0, 0, 0.10);
                     border-radius: 10px;
+                }
+                html.dark .custom-scroll::-webkit-scrollbar-thumb,
+                body.dark .custom-scroll::-webkit-scrollbar-thumb,
+                [data-theme="dark"] .custom-scroll::-webkit-scrollbar-thumb {
+                    background: rgba(255, 255, 255, 0.10);
                 }
             `}</style>
         </div>

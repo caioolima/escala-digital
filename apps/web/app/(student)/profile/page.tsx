@@ -230,7 +230,13 @@ export default function ProfilePage() {
         loadSettings();
     }, [getSettings, resolvedTheme]);
 
-    if (!mounted) return null;
+    if (!mounted) {
+        return (
+            <div style={{ background: "var(--brand-bg)", minHeight: "100%", padding: "40px clamp(20px,5vw,60px) 100px" }}>
+                <ProfileSkeleton isMobile={false} />
+            </div>
+        );
+    }
 
     const colors = {
         bg: "var(--brand-bg)",
