@@ -249,7 +249,10 @@ export default function ProfilePage() {
                 }
             } catch (e) {
                 console.error("Failed to load trusted devices", e);
-                if (isMounted) {
+                const status = (e as any)?.response?.status;
+                const hasToken = typeof window !== "undefined" && Boolean(localStorage.getItem("access_token"));
+                const isAuthRelated = status === 401 || status === 403 || !hasToken;
+                if (isMounted && !isAuthRelated) {
                     showToast("Erro ao carregar dispositivos conectados.", "error");
                 }
             } finally {

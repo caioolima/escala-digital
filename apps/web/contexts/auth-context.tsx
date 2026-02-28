@@ -109,11 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throw new Error(`RESTRICTED_ROLE:${userData.role}`);
         }
 
-        if (userData.role === "CREATOR") {
-            router.push("/creator/dashboard");
-        } else {
-            router.push("/catalog");
-        }
+        const nextPath = userData.role === "CREATOR" ? "/creator/dashboard" : "/catalog";
+        router.push(`/opening?next=${encodeURIComponent(nextPath)}`);
     };
 
     const login = async (email: string, password: string, requiredRole: LoginRole): Promise<LoginResult> => {
@@ -158,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const logout = () => {
         localStorage.removeItem("access_token");
         setUser(null);
-        router.push("/login");
+        router.push("/closing");
     };
 
     const updateProfile = async (data: { name?: string; email?: string; avatarUrl?: string }) => {
