@@ -14,6 +14,7 @@ import {
 import { useTheme } from "next-themes";
 import { api } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Course {
     id: string;
@@ -105,6 +106,7 @@ export default function TrailDetailsPage() {
         window.addEventListener("resize", checkMobile);
 
         const fetchTrailDetails = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 await api.post(`/trails/${trailId}/enroll`).catch(() => null);
@@ -154,7 +156,7 @@ export default function TrailDetailsPage() {
             } catch {
                 console.error('Failed to load trail details');
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
 

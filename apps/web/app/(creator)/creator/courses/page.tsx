@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast, ToastContainer } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Lesson { id: string; videoUrl: string; }
 interface Module { id: string; lessons: Lesson[]; }
@@ -123,6 +124,7 @@ export default function CreatorCoursesPage() {
 
     useEffect(() => {
         const fetchCourses = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 const resp = await api.get("/courses");
@@ -141,7 +143,7 @@ export default function CreatorCoursesPage() {
                 console.error("Failed to fetch creator courses", e);
                 setAllCourses([]);
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
         fetchCourses();

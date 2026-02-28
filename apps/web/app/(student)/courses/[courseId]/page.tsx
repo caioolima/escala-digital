@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/contexts/toast-context";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Lesson {
     id: string;
@@ -103,6 +104,7 @@ export default function CourseDetailsPage() {
         setMounted(true);
 
         const fetchCourseDetails = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 const response = await api.get(`/courses/${courseId}`);
@@ -125,7 +127,7 @@ export default function CourseDetailsPage() {
             } catch (e) {
                 console.error("Failed to load course details", e);
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
 

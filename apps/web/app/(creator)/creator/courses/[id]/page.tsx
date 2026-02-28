@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Attachment {
     id: string;
@@ -88,6 +89,7 @@ export default function CourseViewPage() {
 
     useEffect(() => {
         const fetchCourse = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 const [courseResp, lessonsResp] = await Promise.all([
@@ -138,7 +140,7 @@ export default function CourseViewPage() {
                 console.error("Failed to fetch creator course", e);
                 setCourse(null);
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
         fetchCourse();

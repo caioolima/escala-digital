@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Attachment { id: string; title: string; url: string; }
 interface Lesson { id: string; title: string; videoUrl: string; attachments: Attachment[]; }
@@ -84,6 +85,7 @@ export default function EditCoursePage() {
     useEffect(() => {
         setMounted(true);
         const fetchCourse = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 const [courseResp, lessonsResp] = await Promise.all([
@@ -108,7 +110,7 @@ export default function EditCoursePage() {
             } catch (e) {
                 console.error("Failed to fetch course for edit", e);
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
         fetchCourse();

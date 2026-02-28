@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 /* Types */
 interface Course {
@@ -175,6 +176,7 @@ export default function CreatorTrailsPage() {
     const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
 
     const loadData = async () => {
+        const startedAt = Date.now();
         try {
             const [trailsResp, coursesResp] = await Promise.all([
                 api.get("/trails"),
@@ -204,7 +206,7 @@ export default function CreatorTrailsPage() {
             setTrails([]);
             setAvailableCourses([]);
         } finally {
-            setIsLoading(false);
+            finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
         }
     };
 

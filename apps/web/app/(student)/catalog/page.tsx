@@ -10,6 +10,7 @@ import { useTheme } from "next-themes";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Course {
     id: string;
@@ -82,6 +83,7 @@ export default function CatalogPage() {
         window.addEventListener("resize", checkMobile);
 
         const fetchCourses = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 const response = await api.get("/courses");
@@ -112,7 +114,7 @@ export default function CatalogPage() {
                 console.error("Failed to fetch courses:", e);
                 // Fallback to empty or dummy if absolutely needed
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
 

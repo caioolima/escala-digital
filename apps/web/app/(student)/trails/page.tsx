@@ -8,6 +8,7 @@ import { useTheme } from "next-themes";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useLanguage } from "@/contexts/language-context";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Course {
     id: string;
@@ -128,6 +129,7 @@ export default function TrailsCatalogPage() {
         window.addEventListener("resize", checkMobile);
 
         const fetchData = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 // Try backend first
@@ -190,7 +192,7 @@ export default function TrailsCatalogPage() {
                     console.error('Failed to load trails fallback', e);
                 }
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
 

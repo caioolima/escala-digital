@@ -20,6 +20,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/contexts/toast-context";
 import { useLanguage } from "@/contexts/language-context";
 import { Skeleton, SkeletonCircle } from "@/components/ui/skeleton";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 // useAuth already imported above; no duplicate imports
 
 function ProfileSkeleton({ isMobile }: { isMobile: boolean }) {
@@ -147,6 +148,7 @@ export default function ProfilePage() {
 
         // Fetch real stats from the backend (enrollments + course progress)
         const fetchStats = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 const enrollResp = await api.get('/enrollments/me');
@@ -188,7 +190,7 @@ export default function ProfilePage() {
                     console.warn('failed to read cached user_profile_stats', e);
                 }
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
 

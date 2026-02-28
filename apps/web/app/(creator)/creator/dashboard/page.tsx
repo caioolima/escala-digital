@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Lesson { id: string; videoUrl: string; }
 interface Module { id: string; lessons: Lesson[]; }
@@ -66,6 +67,7 @@ export default function CreatorDashboardPage() {
 
     useEffect(() => {
         const fetchCourses = async () => {
+            const startedAt = Date.now();
             setLoading(true);
             try {
                 const [coursesResp, companyStatsResp] = await Promise.all([
@@ -93,7 +95,7 @@ export default function CreatorDashboardPage() {
                 setCourses([]);
                 setCompanyStudentsCount(0);
             } finally {
-                setLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setLoading(false), MIN_SKELETON_MS);
             }
         };
         fetchCourses();

@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/contexts/toast-context";
 import { api } from "@/lib/api";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 interface Lesson {
     id: string;
@@ -77,6 +78,7 @@ export default function LessonViewPage() {
         window.addEventListener("resize", checkMobile);
 
         const fetchLessonData = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 // Fetch course details with modules/lessons from API
@@ -118,7 +120,7 @@ export default function LessonViewPage() {
             } catch (e) {
                 console.error("Failed to load lesson data", e);
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
 

@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { finishLoadingWithMinimumDelay, MIN_SKELETON_MS } from "@/lib/skeleton-timing";
 
 function CreatorSettingsSkeleton() {
     return (
@@ -102,6 +103,7 @@ export default function CreatorSettingsPage() {
     useEffect(() => {
         setMounted(true);
         const load = async () => {
+            const startedAt = Date.now();
             setIsLoading(true);
             try {
                 const settings = await getSettings?.();
@@ -134,7 +136,7 @@ export default function CreatorSettingsPage() {
                 };
                 setInitialSettings(defaults);
             } finally {
-                setIsLoading(false);
+                finishLoadingWithMinimumDelay(startedAt, () => setIsLoading(false), MIN_SKELETON_MS);
             }
         };
         void load();
