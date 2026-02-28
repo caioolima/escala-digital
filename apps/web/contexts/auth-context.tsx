@@ -18,6 +18,27 @@ type LoginResult =
     | { requires2FA: false }
     | { requires2FA: true; userId: string; email: string; role: LoginRole };
 
+type TrustedDeviceContext = {
+    deviceId: string;
+    timezone?: string;
+    locale?: string;
+    platform?: string;
+    userAgent?: string;
+};
+
+export type TrustedDevice = {
+    id: string;
+    deviceName: string;
+    platform: string | null;
+    timezone: string | null;
+    locale: string | null;
+    ipPrefix: string | null;
+    trustedAt: string;
+    lastSeenAt: string;
+    expiresAt: string;
+    isCurrent: boolean;
+};
+
 interface AuthContextType {
     user: User | null;
     loading: boolean;
@@ -29,9 +50,31 @@ interface AuthContextType {
     changePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
     getSettings?: () => Promise<{ preferences?: any; notifications?: any } | null>;
     updateSettings?: (body: { preferences?: any; notifications?: any }) => Promise<void>;
+    getTrustedDevices?: () => Promise<TrustedDevice[]>;
+    revokeTrustedDevice?: (deviceId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+const TRUSTED_DEVICE_KEY = "trusted_device_id";
+
+function getTrustedDeviceContext(): TrustedDeviceContext {
+    let deviceId = localStorage.getItem(TRUSTED_DEVICE_KEY);
+    if (!deviceId) {
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+            deviceId = crypto.randomUUID();
+        } else {
+            deviceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        }
+        localStorage.setItem(TRUSTED_DEVICE_KEY, deviceId);
+    }
+
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+    const locale = navigator.language || undefined;
+    const platform = navigator.platform || undefined;
+    const userAgent = navigator.userAgent || undefined;
+
+    return { deviceId, timezone, locale, platform, userAgent };
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -75,7 +118,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const login = async (email: string, password: string, requiredRole: LoginRole): Promise<LoginResult> => {
         try {
-            const response = await api.post("/auth/login", { email, password });
+            const deviceContext = getTrustedDeviceContext();
+            const response = await api.post("/auth/login", { email, password, ...deviceContext });
             const data = response.data;
 
             if (data?.requires2FA) {
@@ -101,7 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const verifyTwoFactor = async (userId: string, code: string, requiredRole: LoginRole) => {
-        const response = await api.post("/auth/2fa/verify", { userId, code });
+        const deviceContext = getTrustedDeviceContext();
+        const response = await api.post("/auth/2fa/verify", { userId, code, ...deviceContext });
         const { access_token } = response.data;
         await completeSession(access_token, requiredRole);
     };
@@ -135,8 +180,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return resp.data;
     };
 
+    const getTrustedDevices = async () => {
+        const resp = await api.get('/auth/me/trusted-devices');
+        return (resp.data || []) as TrustedDevice[];
+    };
+
+    const revokeTrustedDevice = async (deviceId: string) => {
+        await api.delete(`/auth/me/trusted-devices/${deviceId}`);
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, verifyTwoFactor, resendTwoFactor, logout, updateProfile, changePassword, getSettings, updateSettings }}>
+        <AuthContext.Provider value={{ user, loading, login, verifyTwoFactor, resendTwoFactor, logout, updateProfile, changePassword, getSettings, updateSettings, getTrustedDevices, revokeTrustedDevice }}>
             {children}
         </AuthContext.Provider>
     );

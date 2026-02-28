@@ -13,10 +13,12 @@ import {
     Settings,
     ChevronRight,
     CheckCircle2,
+    Laptop,
+    Smartphone,
     } from "lucide-react";
 import { useTheme } from "next-themes";
 import { api } from "@/lib/api";
-import { useAuth } from "@/contexts/auth-context";
+import { TrustedDevice, useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/contexts/toast-context";
 import { useLanguage } from "@/contexts/language-context";
 import { Skeleton, SkeletonCircle } from "@/components/ui/skeleton";
@@ -111,7 +113,7 @@ function PersonalDataForm({ user, colors, isDark }: { user: { name?: string; ema
 
 export default function ProfilePage() {
     const { resolvedTheme, setTheme } = useTheme();
-    const { user, logout, changePassword, getSettings, updateSettings } = useAuth();
+    const { user, logout, changePassword, getSettings, updateSettings, getTrustedDevices, revokeTrustedDevice } = useAuth();
     const { showToast } = useToast();
     const { setLanguage: setAppLanguage, t } = useLanguage();
     const isDark = resolvedTheme === "dark";
@@ -139,6 +141,9 @@ export default function ProfilePage() {
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [isSavingNotifications, setIsSavingNotifications] = useState(false);
     const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+    const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[]>([]);
+    const [isLoadingTrustedDevices, setIsLoadingTrustedDevices] = useState(false);
+    const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
 
     useEffect(() => {
         setMounted(true);
@@ -232,6 +237,33 @@ export default function ProfilePage() {
         loadSettings();
     }, [getSettings, resolvedTheme]);
 
+    useEffect(() => {
+        if (activeSection !== "security") return;
+        let isMounted = true;
+        const loadTrustedDevices = async () => {
+            setIsLoadingTrustedDevices(true);
+            try {
+                const devices = await getTrustedDevices?.();
+                if (isMounted) {
+                    setTrustedDevices(devices || []);
+                }
+            } catch (e) {
+                console.error("Failed to load trusted devices", e);
+                if (isMounted) {
+                    showToast("Erro ao carregar dispositivos conectados.", "error");
+                }
+            } finally {
+                if (isMounted) {
+                    setIsLoadingTrustedDevices(false);
+                }
+            }
+        };
+        loadTrustedDevices();
+        return () => {
+            isMounted = false;
+        };
+    }, [activeSection, getTrustedDevices, showToast]);
+
     if (!mounted) {
         return (
             <div style={{ background: "var(--brand-bg)", minHeight: "100%", padding: "40px clamp(20px,5vw,60px) 100px" }}>
@@ -269,6 +301,8 @@ export default function ProfilePage() {
     const hasNotificationChanges = JSON.stringify(notificationPrefs) !== JSON.stringify(initialNotificationPrefs);
     const hasPreferencesChanges = language !== initialLanguage || preferredTheme !== initialPreferredTheme;
     const hasSecurityChanges = enable2FA !== initialEnable2FA || currentPassword.length > 0 || newPassword.length > 0;
+    const formatDeviceDate = (value: string) => new Date(value).toLocaleString("pt-BR");
+    const getDeviceIcon = (deviceName: string) => /mobile|android|iphone|ipad/i.test(deviceName) ? Smartphone : Laptop;
 
     const handleSaveSecurity = async () => {
         if (!hasSecurityChanges) return;
@@ -304,6 +338,20 @@ export default function ProfilePage() {
             showToast("Erro ao salvar configurações de segurança.", "error");
         } finally {
             setIsChangingPassword(false);
+        }
+    };
+
+    const handleRevokeDevice = async (deviceId: string) => {
+        setRevokingDeviceId(deviceId);
+        try {
+            await revokeTrustedDevice?.(deviceId);
+            setTrustedDevices((prev) => prev.filter((device) => device.id !== deviceId));
+            showToast("Dispositivo removido com sucesso.", "success");
+        } catch (e) {
+            console.error("Failed to revoke trusted device", e);
+            showToast("Erro ao remover dispositivo.", "error");
+        } finally {
+            setRevokingDeviceId(null);
         }
     };
 
@@ -693,6 +741,83 @@ export default function ProfilePage() {
                                                 }}>
                                                     {isChangingPassword ? "Salvando..." : t("profile.saveChanges")}
                                                 </button>
+
+                                                <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                        <h4 style={{ fontSize: "16px", fontWeight: 900, margin: 0 }}>Dispositivos conectados</h4>
+                                                        <span style={{ fontSize: "12px", color: colors.textMuted }}>{trustedDevices.length} dispositivo(s)</span>
+                                                    </div>
+
+                                                    {isLoadingTrustedDevices ? (
+                                                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                                            <Skeleton height={64} borderRadius="14px" />
+                                                            <Skeleton height={64} borderRadius="14px" />
+                                                        </div>
+                                                    ) : trustedDevices.length === 0 ? (
+                                                        <div style={{ padding: "14px 16px", borderRadius: "14px", border: `1px solid ${colors.border}`, color: colors.textMuted }}>
+                                                            Nenhum dispositivo confiavel salvo ainda.
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                                            {trustedDevices.map((device) => {
+                                                                const Icon = getDeviceIcon(device.deviceName);
+                                                                return (
+                                                                    <div key={device.id} style={{
+                                                                        display: "flex",
+                                                                        alignItems: "center",
+                                                                        justifyContent: "space-between",
+                                                                        gap: "12px",
+                                                                        padding: "14px",
+                                                                        borderRadius: "14px",
+                                                                        border: `1px solid ${colors.border}`,
+                                                                        background: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc"
+                                                                    }}>
+                                                                        <div style={{ display: "flex", gap: "12px", alignItems: "center", minWidth: 0 }}>
+                                                                            <div style={{
+                                                                                width: "36px",
+                                                                                height: "36px",
+                                                                                borderRadius: "10px",
+                                                                                background: isDark ? "rgba(255,255,255,0.06)" : "white",
+                                                                                border: `1px solid ${colors.border}`,
+                                                                                display: "flex",
+                                                                                alignItems: "center",
+                                                                                justifyContent: "center",
+                                                                                color: colors.accent
+                                                                            }}>
+                                                                                <Icon size={18} />
+                                                                            </div>
+                                                                            <div style={{ minWidth: 0 }}>
+                                                                                <div style={{ fontWeight: 800, fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                                                    {device.deviceName} {device.isCurrent ? "(Atual)" : ""}
+                                                                                </div>
+                                                                                <div style={{ fontSize: "12px", color: colors.textMuted }}>
+                                                                                    Ultimo acesso: {formatDeviceDate(device.lastSeenAt)}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleRevokeDevice(device.id)}
+                                                                            disabled={revokingDeviceId === device.id}
+                                                                            style={{
+                                                                                border: "none",
+                                                                                background: "rgba(239, 68, 68, 0.1)",
+                                                                                color: "#ef4444",
+                                                                                padding: "8px 10px",
+                                                                                borderRadius: "10px",
+                                                                                fontSize: "12px",
+                                                                                fontWeight: 800,
+                                                                                cursor: revokingDeviceId === device.id ? "not-allowed" : "pointer",
+                                                                                opacity: revokingDeviceId === device.id ? 0.7 : 1
+                                                                            }}
+                                                                        >
+                                                                            {revokingDeviceId === device.id ? "Removendo..." : "Desconectar"}
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
