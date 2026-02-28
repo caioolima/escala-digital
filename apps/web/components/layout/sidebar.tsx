@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
 import { useTheme } from "next-themes";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
     BookOpen,
     LayoutGrid,
@@ -33,9 +33,10 @@ const creatorLinks = [
 interface SidebarProps {
     isCollapsed: boolean;
     onToggle: () => void;
+    variant?: "student" | "creator";
 }
 
-export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
+export function Sidebar({ isCollapsed, onToggle, variant }: SidebarProps) {
     const [mounted, setMounted] = useState(false);
     const { user, logout } = useAuth();
     const pathname = usePathname();
@@ -47,7 +48,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
         setMounted(true);
     }, []);
 
-    const isCreator = user?.role === "CREATOR";
+    const isCreator = variant ? variant === "creator" : user?.role === "CREATOR";
     const studentLinks = [
         { href: "/catalog", label: t("nav.courses"), icon: LayoutGrid },
         { href: "/trails", label: t("nav.trails"), icon: Map },
@@ -69,8 +70,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 
     return (
         <motion.aside
-            initial={{ x: -280 }}
-            animate={{ x: 0 }}
+            initial={false}
             style={{
                 width: "100%",
                 height: "100%",
@@ -79,7 +79,6 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                 background: isDark ? "rgba(2, 6, 23, 0.4)" : "rgba(255, 255, 255, 0.4)",
                 backdropFilter: "blur(10px)",
                 borderRight: `1px solid ${colors.border}`,
-                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 position: "relative",
                 overflowX: "hidden"
             }}
@@ -181,7 +180,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     );
                 })}
 
-                {user?.role === "CREATOR" && (
+                {isCreator && (
                     <div style={{ marginTop: "24px", paddingTop: "24px", borderTop: `1px solid ${colors.border}` }}>
                         <Link
                             href="/creator/courses/new"

@@ -134,7 +134,7 @@ export default function CreatorLayout({
                         transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                         flexShrink: 0
                     }}>
-                        <Sidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
+                        <Sidebar variant="creator" isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
                     </div>
                 )}
 
