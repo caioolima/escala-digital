@@ -23,6 +23,20 @@ Na pratica, a plataforma atende dois fluxos principais:
 - reviews e avaliacoes ao final do consumo
 - emails transacionais para acesso, verificacao e comunicacao de plataforma
 
+## Screenshots
+
+### Acesso
+
+![Tela de login da plataforma](assets/screenshots/login.png)
+
+### Dashboard do Criador
+
+![Painel corporativo com indicadores, cursos e acoes rapidas](assets/screenshots/creator-dashboard.png)
+
+### Catalogo do Aluno
+
+![Experiencia do aluno com destaque de curso e grade de conteudos](assets/screenshots/catalog.png)
+
 ## Stack
 
 ### Frontend
