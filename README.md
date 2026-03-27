@@ -1,135 +1,233 @@
-# Turborepo starter
+# Escala Digital
 
-This Turborepo starter is maintained by the Turborepo core team.
+Plataforma de educacao corporativa para publicar cursos, organizar trilhas e acompanhar a evolucao dos alunos em um unico ambiente.
 
-## Using this example
+## Visao Geral
 
-Run the following command:
+O projeto foi estruturado como um monorepo com frontend em Next.js, backend em NestJS e banco PostgreSQL via Prisma.
 
-```sh
-npx create-turbo@latest
+Na pratica, a plataforma atende dois perfis principais:
+
+- alunos, com catalogo, trilhas, player de aulas, progresso e avaliacao de cursos
+- gestores/criadores, com dashboard, criacao de cursos, organizacao de trilhas e acompanhamento operacional
+
+Tambem existe uma camada de autenticacao com separacao por perfil, verificacao em duas etapas e suporte a dispositivos confiaveis.
+
+## Principais Funcionalidades
+
+- login segmentado para aluno e acesso corporativo
+- autenticacao JWT com 2FA por codigo e trusted devices
+- area do aluno com catalogo de cursos e jornadas de aprendizagem
+- player de aulas com marcacao de progresso e conclusao
+- trilhas formadas por multiplos cursos
+- dashboard do gestor com indicadores, cursos publicados e rascunhos
+- criacao, edicao e organizacao de cursos e trilhas
+- matriculas em cursos e trilhas
+- avaliacoes e reviews ao final dos cursos
+- emails transacionais para acesso, verificacao e novos cursos
+
+## Arquitetura
+
+```text
+.
+├── apps
+│   ├── api      # API NestJS + Prisma
+│   ├── web      # Aplicacao principal em Next.js
+│   └── docs     # Workspace de documentacao/apoio
+├── packages
+│   ├── ui
+│   ├── eslint-config
+│   └── typescript-config
+├── docker-compose.yml
+├── package.json
+└── turbo.json
 ```
 
-## What's inside?
+## Stack
 
-This Turborepo includes the following packages/apps:
+### Frontend
 
-### Apps and Packages
+- Next.js 16
+- React 19
+- Tailwind CSS 4
+- Framer Motion
+- Radix UI
+- Axios
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+### Backend
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+- NestJS 11
+- Prisma ORM
+- PostgreSQL
+- JWT
+- class-validator
+- bcrypt
 
-### Utilities
+### Monorepo
 
-This Turborepo has some additional tools already setup for you:
+- Turborepo
+- npm workspaces
+- TypeScript
+- ESLint
+- Prettier
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+## Modelagem de Produto
 
-### Build
+No banco, a plataforma gira em torno destas entidades:
 
-To build all apps and packages, run the following command:
+- `Company`: empresa responsavel pelo ambiente
+- `User`: usuario com papel `CREATOR` ou `STUDENT`
+- `Course`: curso publicado pela empresa
+- `Module` e `Lesson`: estrutura interna do curso
+- `Trail`: trilha que conecta varios cursos
+- `Enrollment` e `TrailEnrollment`: matriculas
+- `LessonProgress`: progresso por aula
+- `Review`: avaliacao do curso
+- `TrustedDevice`: controle de dispositivos confiaveis para 2FA
 
-```
-cd my-turborepo
+## Execucao Local
 
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
+### Requisitos
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
-```
+- Node.js 18+
+- npm 11+
+- Docker e Docker Compose
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 1. Instale as dependencias
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
+```bash
+npm install
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 2. Suba o PostgreSQL
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+```bash
+docker-compose up -d
 ```
 
-### Remote Caching
+O banco sobe por padrao com:
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+- host: `localhost`
+- porta: `5438`
+- database: `course_platform`
+- user: `postgres`
+- password: `postgres`
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+### 3. Configure as variaveis de ambiente
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+Crie um arquivo `.env` em `apps/api` com algo neste formato:
 
-```
-cd my-turborepo
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5438/course_platform?schema=public"
+JWT_SECRET="super-secret"
+JWT_EXPIRES_IN="7d"
+PORT=3001
+FRONTEND_URL="http://localhost:3000"
+WEB_APP_URL="http://localhost:3000"
 
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
+# opcionais
+SMTP_USER=""
+SMTP_PASS=""
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT="465"
+SMTP_SECURE="true"
+SMTP_FROM=""
+EMAIL_WEBHOOK_URL=""
+EMAIL_WEBHOOK_TOKEN=""
 ```
 
-## Useful Links
+Crie um arquivo `.env.local` em `apps/web`:
 
-Learn more about the power of Turborepo:
+```env
+NEXT_PUBLIC_API_URL="http://localhost:3001/api"
+```
 
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+### 4. Rode migrations e seed
+
+```bash
+npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+npm --workspace api run prisma:seed
+```
+
+### 5. Inicie a aplicacao
+
+Em terminais separados:
+
+```bash
+npm --workspace api run start:dev
+npm --workspace web run dev
+```
+
+Aplicacoes:
+
+- frontend: [http://localhost:3000](http://localhost:3000)
+- API: [http://localhost:3001/api](http://localhost:3001/api)
+
+## Scripts Uteis
+
+### Na raiz
+
+```bash
+npm run dev
+npm run build
+npm run lint
+npm run check-types
+```
+
+### Por workspace
+
+```bash
+npm --workspace web run dev
+npm --workspace api run start:dev
+npm --workspace web run build
+npm --workspace api run test
+```
+
+## Modulos da API
+
+Os principais modulos do backend hoje sao:
+
+- `auth`: autenticacao, login por perfil, 2FA e dispositivos confiaveis
+- `courses`: catalogo, detalhes e operacoes de cursos
+- `lessons`: conteudo e fluxo de aulas
+- `trails`: agrupamento de cursos em jornadas
+- `enrollments`: matriculas e acesso do aluno
+- `reviews`: feedback e avaliacao de cursos
+- `mail`: envio de emails transacionais
+- `prisma`: acesso ao banco
+
+## Fluxos Principais
+
+### Aluno
+
+- faz login com o perfil de aluno
+- acessa catalogo e trilhas
+- consome aulas no player
+- conclui conteudos
+- avalia o curso ao final
+
+### Gestor / Criador
+
+- acessa o ambiente corporativo
+- cria cursos e trilhas
+- publica conteudos
+- acompanha indicadores no dashboard
+- libera acesso para alunos
+
+## Status Atual
+
+O repositorio ainda mistura areas ja evoluidas do produto com alguns arquivos herdados de templates do Turborepo, Next.js e NestJS. O core da plataforma, no entanto, ja esta modelado em cima do dominio de educacao corporativa.
+
+No uso local, prefira iniciar `web` e `api` separadamente. O workspace `docs` existe no monorepo, mas hoje usa a mesma faixa de porta da API e pode exigir ajuste antes de rodar em paralelo.
+
+## Melhorias Futuras
+
+- adicionar arquivos `.env.example` por workspace
+- padronizar a documentacao interna de `apps/web` e `apps/api`
+- consolidar o workspace `docs` com uma funcao mais clara
+- incluir CI para lint, typecheck e testes
+- documentar deploy e estrategia de ambientes
+
+## Licenca
+
+Uso privado do projeto.
