@@ -1,13 +1,77 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { GraduationCap, LogOut, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 const CLOSING_DELAY_MS = 1800;
 
-export default function ClosingPage() {
+function ClosingFallback() {
+    return (
+        <main style={{
+            minHeight: "100vh",
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+            backgroundColor: "#060d1f",
+            color: "white",
+        }}>
+            <div style={{
+                width: "100%",
+                maxWidth: "460px",
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "24px",
+                padding: "42px 36px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "18px",
+                alignItems: "center",
+            }}>
+                <div style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "16px",
+                    background: "linear-gradient(135deg, #ef4444 0%, #f43f5e 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 16px 30px rgba(239,68,68,0.35)",
+                }}>
+                    <LogOut size={30} color="white" />
+                </div>
+
+                <h2 style={{ margin: "4px 0 0 0", fontSize: "28px", fontWeight: 900, letterSpacing: "-1px" }}>
+                    Até logo
+                </h2>
+                <p style={{ margin: 0, textAlign: "center", color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>
+                    Redirecionando para o login...
+                </p>
+
+                <div style={{
+                    width: "100%",
+                    height: "6px",
+                    borderRadius: "999px",
+                    background: "rgba(255,255,255,0.12)",
+                    overflow: "hidden",
+                    marginTop: "4px",
+                }}>
+                    <div style={{
+                        width: "40%",
+                        height: "100%",
+                        background: "linear-gradient(90deg, #ef4444, #f43f5e)",
+                        animation: "loading 1.1s ease-in-out infinite",
+                    }} />
+                </div>
+            </div>
+        </main>
+    );
+}
+
+function ClosingContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { resolvedTheme, setTheme } = useTheme();
@@ -206,5 +270,13 @@ export default function ClosingPage() {
                 </div>
             </main>
         </>
+    );
+}
+
+export default function ClosingPage() {
+    return (
+        <Suspense fallback={<ClosingFallback />}>
+            <ClosingContent />
+        </Suspense>
     );
 }
